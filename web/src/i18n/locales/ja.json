@@ -72,6 +72,7 @@
     "Step-by-step guides for private pools, API keys, and client setup.": "プライベートプール、API キー、クライアント設定の手順ガイドです。",
     "Manage the notice and timeline shown in the header notification center. Markdown and sanitized HTML are supported with no content length limit.": "ヘッダーの通知センターに表示される通知とタイムラインを管理します。Markdown と安全にサニタイズされた HTML に対応し、文字数制限はありません。",
     "Supports Markdown and sanitized HTML. No content length limit.": "Markdown と安全にサニタイズされた HTML に対応し、文字数制限はありません。",
+    "Saving this notice automatically records it in Timeline with the server publish time. Earlier notices are kept.": "この通知を保存すると、サーバーの公開日時とともにタイムラインへ自動記録され、以前の通知も保持されます。",
     "Optional supplementary information. Markdown and sanitized HTML are supported with no content length limit.": "任意の補足情報です。Markdown と安全にサニタイズされた HTML に対応し、文字数制限はありません。",
     "Publish and manage platform announcements.": "プラットフォームのお知らせを公開・管理します。",
     "Point any OpenAI-compatible client at the gateway.": "Point any OpenAI-compatible client at the gateway.",

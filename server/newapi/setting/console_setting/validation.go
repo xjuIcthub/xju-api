@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -214,10 +215,31 @@ func getPublishTime(item map[string]interface{}) time.Time {
 	return time.Time{}
 }
 
+func getAnnouncementID(item map[string]interface{}) int64 {
+	switch value := item["id"].(type) {
+	case float64:
+		return int64(value)
+	case int:
+		return int64(value)
+	case int64:
+		return value
+	case string:
+		id, _ := strconv.ParseInt(value, 10, 64)
+		return id
+	default:
+		return 0
+	}
+}
+
 func GetAnnouncements() []map[string]interface{} {
 	list := getJSONList(GetConsoleSetting().Announcements)
 	sort.SliceStable(list, func(i, j int) bool {
-		return getPublishTime(list[i]).After(getPublishTime(list[j]))
+		iTime := getPublishTime(list[i])
+		jTime := getPublishTime(list[j])
+		if iTime.Equal(jTime) {
+			return getAnnouncementID(list[i]) > getAnnouncementID(list[j])
+		}
+		return iTime.After(jTime)
 	})
 	return list
 }

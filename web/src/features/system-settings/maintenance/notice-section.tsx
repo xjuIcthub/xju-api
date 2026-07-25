@@ -116,6 +116,10 @@ export function NoticeSection({
                   {t(
                     'Supports Markdown and sanitized HTML. No content length limit.'
                   )}
+                  {' '}
+                  {t(
+                    'Saving this notice automatically records it in Timeline with the server publish time. Earlier notices are kept.'
+                  )}
                 </FormDescription>
                 <FormMessage />
               </FormItem>

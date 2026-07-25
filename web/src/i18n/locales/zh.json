@@ -72,6 +72,7 @@
     "Step-by-step guides for private pools, API keys, and client setup.": "私人号池、API 密钥和客户端配置的分步教程。",
     "Manage the notice and timeline shown in the header notification center. Markdown and sanitized HTML are supported with no content length limit.": "管理顶部通知中心中的通知公告与时间线公告。支持 Markdown 和经过安全过滤的 HTML，不限制内容字数。",
     "Supports Markdown and sanitized HTML. No content length limit.": "支持 Markdown 和经过安全过滤的 HTML，不限制内容字数。",
+    "Saving this notice automatically records it in Timeline with the server publish time. Earlier notices are kept.": "保存此公告时会自动按服务器发布时间写入时间线，之前的公告会继续保留。",
     "Optional supplementary information. Markdown and sanitized HTML are supported with no content length limit.": "可选补充说明。支持 Markdown 和经过安全过滤的 HTML，不限制内容字数。",
     "Publish and manage platform announcements.": "发布并管理平台公告。",
     "Point any OpenAI-compatible client at the gateway.": "把任意兼容 OpenAI 的客户端指向本服务即可。",

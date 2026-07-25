@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -332,7 +333,14 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
-	err = model.UpdateOption(option.Key, option.Value.(string))
+	switch option.Key {
+	case "Notice":
+		err = model.UpdateNoticeWithHistory(option.Value.(string), time.Now().UTC())
+	case "console_setting.announcements":
+		err = model.UpdateAnnouncementHistory(option.Value.(string))
+	default:
+		err = model.UpdateOption(option.Key, option.Value.(string))
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return

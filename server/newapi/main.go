@@ -42,6 +42,7 @@ import (
 
 // xju-api:edit — 单主题化:前端源码已上移至仓库顶层 web/,构建产物由
 // deploy/build-newapi.sh 拷入 web/dist(入库占位 index.html 保证裸 go build 可编译)。
+//
 //go:embed web/dist
 var buildFS embed.FS
 
@@ -347,6 +348,9 @@ func InitResources() error {
 	err = model.InitLogDB()
 	if err != nil {
 		return err
+	}
+	if err := model.EnsureNoticeHistory(); err != nil {
+		common.SysLog("failed to migrate current notice into announcement history: " + err.Error())
 	}
 
 	// Initialize Redis

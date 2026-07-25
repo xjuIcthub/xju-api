@@ -72,6 +72,7 @@
     "Step-by-step guides for private pools, API keys, and client setup.": "Hướng dẫn từng bước cho nhóm riêng, khóa API và cấu hình ứng dụng khách.",
     "Manage the notice and timeline shown in the header notification center. Markdown and sanitized HTML are supported with no content length limit.": "Quản lý thông báo và dòng thời gian trong trung tâm thông báo. Hỗ trợ Markdown và HTML đã làm sạch, không giới hạn độ dài.",
     "Supports Markdown and sanitized HTML. No content length limit.": "Hỗ trợ Markdown và HTML đã làm sạch, không giới hạn độ dài.",
+    "Saving this notice automatically records it in Timeline with the server publish time. Earlier notices are kept.": "Khi lưu, thông báo này sẽ tự động được ghi vào Dòng thời gian theo thời gian phát hành của máy chủ. Các thông báo trước đó vẫn được giữ lại.",
     "Optional supplementary information. Markdown and sanitized HTML are supported with no content length limit.": "Thông tin bổ sung không bắt buộc. Hỗ trợ Markdown và HTML đã làm sạch, không giới hạn độ dài.",
     "Publish and manage platform announcements.": "Đăng và quản lý thông báo của nền tảng.",
     "Point any OpenAI-compatible client at the gateway.": "Point any OpenAI-compatible client at the gateway.",

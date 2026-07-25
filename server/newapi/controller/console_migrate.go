@@ -41,8 +41,16 @@ func MigrateConsoleSetting(c *gin.Context) {
 	}
 	// Announcements 直接搬
 	if v := valMap["Announcements"]; v != "" {
-		model.UpdateOption("console_setting.announcements", v)
-		model.UpdateOption("Announcements", "")
+		if err := model.UpdateAnnouncementHistory(v); err != nil {
+			common.SysError("failed to merge legacy announcements: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "迁移历史公告失败，请稍后重试"})
+			return
+		}
+		if err := model.UpdateOption("Announcements", ""); err != nil {
+			common.SysError("failed to clear legacy announcements: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "清理旧公告配置失败，请稍后重试"})
+			return
+		}
 	}
 	// FAQ 转换
 	if v := valMap["FAQ"]; v != "" {

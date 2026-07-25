@@ -72,6 +72,7 @@
     "Step-by-step guides for private pools, API keys, and client setup.": "Guides pas à pas pour les pools privés, les clés API et la configuration des clients.",
     "Manage the notice and timeline shown in the header notification center. Markdown and sanitized HTML are supported with no content length limit.": "Gérez la notification et la chronologie affichées dans le centre de notifications. Markdown et le HTML assaini sont pris en charge sans limite de longueur.",
     "Supports Markdown and sanitized HTML. No content length limit.": "Prend en charge Markdown et le HTML assaini, sans limite de longueur.",
+    "Saving this notice automatically records it in Timeline with the server publish time. Earlier notices are kept.": "L’enregistrement de cet avis l’ajoute automatiquement à la chronologie avec l’heure de publication du serveur. Les avis précédents sont conservés.",
     "Optional supplementary information. Markdown and sanitized HTML are supported with no content length limit.": "Informations complémentaires facultatives. Markdown et le HTML assaini sont pris en charge sans limite de longueur.",
     "Publish and manage platform announcements.": "Publier et gérer les annonces de la plateforme.",
     "Point any OpenAI-compatible client at the gateway.": "Point any OpenAI-compatible client at the gateway.",

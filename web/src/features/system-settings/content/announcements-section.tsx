@@ -71,6 +71,7 @@ type Announcement = {
   publishDate: string
   type: 'default' | 'ongoing' | 'success' | 'warning' | 'error'
   extra?: string
+  source?: 'notice'
 }
 
 type AnnouncementsSectionProps = {
@@ -281,8 +282,12 @@ export function AnnouncementsSection({
     }
   }
 
+  const editableAnnouncementIds = announcements
+    .filter((announcement) => announcement.source !== 'notice')
+    .map((announcement) => announcement.id)
+
   const toggleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? announcements.map((item) => item.id) : [])
+    setSelectedIds(checked ? editableAnnouncementIds : [])
   }
 
   const toggleSelectOne = (id: number, checked: boolean) => {
@@ -293,9 +298,9 @@ export function AnnouncementsSection({
 
   const sortedAnnouncements = useMemo(() => {
     return [...announcements].sort((a, b) => {
-      return (
+      const timeDifference =
         new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
-      )
+      return timeDifference || b.id - a.id
     })
   }, [announcements])
 
@@ -361,8 +366,8 @@ export function AnnouncementsSection({
               header: (
                 <Checkbox
                   checked={
-                    selectedIds.length === announcements.length &&
-                    announcements.length > 0
+                    selectedIds.length === editableAnnouncementIds.length &&
+                    editableAnnouncementIds.length > 0
                   }
                   onCheckedChange={toggleSelectAll}
                 />
@@ -371,6 +376,7 @@ export function AnnouncementsSection({
               cell: (announcement) => (
                 <Checkbox
                   checked={selectedIds.includes(announcement.id)}
+                  disabled={announcement.source === 'notice'}
                   onCheckedChange={(checked) =>
                     toggleSelectOne(announcement.id, checked as boolean)
                   }
@@ -425,15 +431,22 @@ export function AnnouncementsSection({
             {
               id: 'actions',
               header: t('Actions'),
-              cell: (announcement) => (
-                <StaticRowActions
-                  editLabel={t('Edit')}
-                  deleteLabel={t('Delete')}
-                  menuLabel={t('Open menu')}
-                  onEdit={() => handleEdit(announcement)}
-                  onDelete={() => handleDelete(announcement)}
-                />
-              ),
+              cell: (announcement) =>
+                announcement.source === 'notice' ? (
+                  <StatusBadge
+                    label={t('Published')}
+                    variant='neutral'
+                    copyable={false}
+                  />
+                ) : (
+                  <StaticRowActions
+                    editLabel={t('Edit')}
+                    deleteLabel={t('Delete')}
+                    menuLabel={t('Open menu')}
+                    onEdit={() => handleEdit(announcement)}
+                    onDelete={() => handleDelete(announcement)}
+                  />
+                ),
             },
           ]}
         />

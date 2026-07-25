@@ -87,10 +87,7 @@ export function useNotifications() {
   const announcements = useMemo<Record<string, unknown>[]>(
     () =>
       announcementsEnabled
-        ? ((status?.announcements || []) as Record<string, unknown>[]).slice(
-            0,
-            20
-          )
+        ? ((status?.announcements || []) as Record<string, unknown>[])
         : [],
     [announcementsEnabled, status?.announcements]
   )
