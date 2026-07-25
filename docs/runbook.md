@@ -30,31 +30,44 @@ bash deploy/deploy.sh announcements-20260724
 PULL=0 bash deploy/deploy.sh
 SKIP_WEB=1 bash deploy/deploy.sh emergency-tag
 
-# CLIProxyAPI(自建镜像 winbeau/cli-proxy-api:<tag> —— 含仓内 cliproxy 改动,不能追 eceasy 上游)
-cd /home/winbeau/opt/xju-api && git pull --ff-only origin main
-bash deploy/build-cliproxy.sh v0.9.x                 # 在 tri 构建;镜像入本地 docker(同机 run 免 registry)
+# CLIProxyAPI（自建镜像，commit 与镜像一一对应；只构建 Go，不构建前端）
+cd /home/winbeau/opt/xju-api
 
-# 所有池现在都是动态池(含 default=main / k12=k12-pool);provision watcher 只有 create/delete,
-# 无 image-upgrade —— 逐个手工重建。auths-<id>/ 是挂载卷,重建不丢号;端口/config/env 都按池 id 区分。
-# 现役池: main(8317)、k12-pool(8318),外加任意一键开的池。逐个:
-for id_port in main:8317 k12-pool:8318; do
-  id="${id_port%%:*}"; port="${id_port##*:}"
-  docker rm -f "cli-proxy-api-$id"
-  docker run -d --name "cli-proxy-api-$id" --restart unless-stopped \
-    --network xju-net -p "127.0.0.1:$port:$port" \
-    -v "/opt/cli-proxy-api/config.$id.yaml":/CLIProxyAPI/config.yaml \
-    -v "/opt/cli-proxy-api/auths-$id":/root/.cli-proxy-api \
-    -v "/opt/cli-proxy-api/logs-$id":/CLIProxyAPI/logs \
-    --env-file "/opt/cli-proxy-api/.pool-mgmt-$id.env" \
-    winbeau/cli-proxy-api:v0.9.x
-  curl -fsS "http://127.0.0.1:$port/healthz"          # 验活
-done
-# 其余动态池:docker ps --format '{{.Names}}' | grep '^cli-proxy-api-' 列全,同法逐个重建。
-# (backlog:给 provision-poold.sh 加 upgrade/recreate action 可自动化这步。)
+# 只预检：打印 main HEAD、目标 deploy-<7位SHA>、现役池和 canary/main 顺序，零变更
+bash deploy/deploy-cliproxy.sh --dry-run
 
-# 新 tag verify 通过后,立即回收被取代的旧构建(资源卫生;安全,不碰运行中镜像/回滚锚):
-bash deploy/prune-docker.sh && docker system df
+# 一键拉取 main、构建、备份、逐池升级、失败自动回滚、同步未来新池镜像并验活
+PRUNE=0 bash deploy/deploy-cliproxy.sh
+
+# 部署后发现回归时，使用 .cliproxy-image.env 中记录的精确上一镜像整批回滚
+PULL=0 bash deploy/deploy-cliproxy.sh --rollback
+
+# 也可显式指定 commit 镜像
+PULL=0 bash deploy/deploy-cliproxy.sh \
+  --rollback winbeau/cli-proxy-api:deploy-123abcd
 ```
+
+CLIProxyAPI 镜像固定为 `winbeau/cli-proxy-api:deploy-<当前 main 的 7 位提交短 SHA>`，
+脚本拒绝 tag/commit 不一致的构建。它只管理**当前正在运行**的
+`cli-proxy-api-<id>`，不会复活故意停用或不存在的 `k12-pool`。升级顺序为一个非
+`main` 池作 canary、其余池、`main` 最后；私有池的 256 MiB/0.75 CPU/PID/日志限制
+由 `deploy/cliproxy-pool-runtime.sh` 统一保留。
+
+部署期间会创建 provision maintenance gate，等待在途开池完成后停止 watcher；所有池
+通过后才原子更新 `/opt/cli-proxy-api/.cliproxy-image.env` 并重启 watcher，因此现役池与
+未来新池始终使用同一 commit 镜像。任一池失败会逆序恢复本轮已升级池；若无法完整恢复，
+maintenance 会保留且 watcher 不启动，避免在不一致 fleet 上继续开池。
+
+默认 `PRUNE=0`，上一镜像作为回滚锚保留。确认稳定后运行：
+
+```bash
+KEEP=2 bash deploy/prune-docker.sh
+```
+
+> `deploy/deploy.sh` 仍是 New API（前端 + Go）部署入口；只更新 CLIProxyAPI 时不要运行它。
+> `deploy/docker-compose.cliproxy.yml` 是退役静态拓扑的历史/破玻璃参考，常规升级严禁
+> `docker compose up`。一键部署也会在发现静态 `cli-proxy-api`/`cli-proxy-api-k12`
+> 容器时 fail closed，防止抢占 8317/8318。
 
 ### Anthropic 兼容升级说明（2026-07-24）
 
@@ -81,7 +94,7 @@ Advanced Custom，再分别用 `/v1/messages/count_tokens`、`/v1/messages` 和 
 
 - **迁移动作**(已完成,勿重复):停旧静态容器 → provision watcher 建 `main`/`k12-pool` 动态池(端口沿用 8317/8318)→ `cp -a` 旧 `auths/`→`auths-main/`、`auths-k12/`→`auths-k12-pool/`(号原样搬,disabled 位保真)→ 新 channel 3/4 建成后**改回 `default`/`k12` 组**(存量卡不用换发)→ 停旧 channel 1/2 → 删 GroupRatio/UserUsableGroups 里多余的 `main`/`k12-pool` 组 → 清空 env 密钥隐藏静态池 → 删旧静态容器。
 - **channel 1 必须留(即便 disabled)**:`createPoolChannel` 克隆 channel id 1 的 models 当模板,删了则一键开新池会报 "cannot read primary channel"。
-- **回滚(破玻璃)**:旧号在 `auths/` + `auths-k12/` 原样保留;旧 config(`config.yaml`/`config.k12.yaml`)、旧密钥(`.pool-mgmt.env.retired` / `.pool-mgmt-k12.env.retired`)、旧镜像 `winbeau/cli-proxy-api:v0.8.6` 均在位。回滚 = 停 `main`/`k12-pool` → 把 `.retired` 改回 → compose(或 docker run)起旧静态容器 → 前端 channel 3/4 停、1/2 启 → 重跑 `run-newapi.sh`(注入回旧密钥)。
+- **回滚(破玻璃)**:旧号在 `auths/` + `auths-k12/` 原样保留;旧 config(`config.yaml`/`config.k12.yaml`)、旧密钥(`.pool-mgmt.env.retired` / `.pool-mgmt-k12.env.retired`)、旧镜像 `winbeau/cli-proxy-api:v0.8.6` 均在位。正常版本回滚优先运行 `deploy/deploy-cliproxy.sh --rollback`;只有该脚本及动态备份都不可用时,才停 `main`/`k12-pool` → 把 `.retired` 改回 → 参照 git 历史中的退役 compose(或等价 docker run)起旧静态容器 → 前端 channel 3/4 停、1/2 启 → 重跑 `run-newapi.sh`(注入回旧密钥)。
 - **k12 池 501 号全 disabled** 是迁移前就有的存量状态(旧 k12 channel 同样不出模型),不是本次迁移引入;要激活需对号做验活/enriched 重登。
 
 ## Codex 账号登录（claude-tri）
@@ -148,7 +161,7 @@ CLIProxyAPI 容器仍是旧镜像。临时回退可设 `supports_websockets = fa
 | K12 | `/opt/cli-proxy-api/.pool-mgmt-k12.env` | `cli-proxy-api-k12` 容器 + new-api | `MANAGEMENT_PASSWORD` 与 `POOL_K12_MGMT_SECRET`(同值) |
 
 - **生成**:[deploy/setup-pool-mgmt.sh](../deploy/setup-pool-mgmt.sh) / [setup-pool-mgmt-k12.sh](../deploy/setup-pool-mgmt-k12.sh)。幂等——已存在非空文件不覆盖。
-- **轮换**:`bash deploy/setup-pool-mgmt.sh --force`(K12 同理)→ `docker compose up -d` 重建对应 cli-proxy 容器(重新加载 env_file)→ 重跑 `deploy/run-newapi.sh`(重注入 new-api 侧密钥)。三步缺一不可,否则两侧密钥不一致、池管理全 401。
+- **轮换(退役静态池破玻璃路径)**:`bash deploy/setup-pool-mgmt.sh --force`(K12 同理)→ 按旧静态容器参数重建对应 CLIProxyAPI → 重跑 `deploy/run-newapi.sh`(重注入 new-api 侧密钥)。现役动态池使用各自 `.pool-mgmt-<id>.env`,不走 compose。
 - **为什么走明文 env**:`config.yaml` 里的 `secret-key` 是 bcrypt 哈希,不能当 Bearer 用;`MANAGEMENT_PASSWORD` 走 ConstantTimeCompare,且会自动解除 `allow-remote:false` 让 new-api 从 docker 内网调管理 API。
 - **xju-net 互访契约**:管理 API 只在 docker 内网,new-api 用容器名访问——`http://cli-proxy-api:8317` / `http://cli-proxy-api-k12:8318`(env:`POOL_MGMT_URL` / `POOL_K12_MGMT_URL`)。某池密钥留空 = 该池端点 503、前端自动隐藏该池 Tab,其余部署不受影响。
 
@@ -163,7 +176,7 @@ tri 上迁移步骤:
 1. **备份先行**:`bash deploy/backup.sh`。
 2. **更新仓库**:`cd /home/winbeau/opt/xju-api && git pull --ff-only origin main`(git 自动应用 rename;或干脆删掉重 clone——仓库无状态,数据都在 `/opt` 宿主卷)。
 3. **prebuilt 新路径**:旧 `new-api/prebuilt/{default-dist,classic-dist}` 作废删除;tri 完整构建会自动生成 `server/newapi/prebuilt/dist`(单产物)。
-4. **引用检查**:backup cron 走 `deploy/backup.sh` 相对仓库路径未变,无需动;若有 `docker compose -f` 指向仓库内 compose 的命令/别名,文件名改为 `deploy/docker-compose.cliproxy.yml`(`/opt/cli-proxy-api/docker-compose.yml` 落位拷贝不受影响,如需同步内容重新拷一份)。
+4. **引用检查**:backup cron 走 `deploy/backup.sh` 相对仓库路径未变;旧的 `docker compose -f` 命令/别名应删除,CLIProxyAPI 统一改用 `deploy/deploy-cliproxy.sh`。
 5. **完整部署**:`bash deploy/deploy.sh <tag>`(拉取、护栏、构建、换容器、清理、本地/公网验活与服务检查)。
 6. **回滚**:布局回滚 = `git checkout d02c62c`(重组前最后一个 commit,旧脚本名照旧用)+ 旧镜像 tag 重跑;数据不涉及。
 
@@ -175,8 +188,14 @@ tri 上迁移步骤:
 ```bash
 # 1) 共享目录(watcher 属主,new-api 容器 root 写请求进来它也能 mv)
 sudo install -d -o winbeau -g winbeau /opt/xju-api/provision/{requests,results,processed}
-# 2) systemd unit(按需改 ExecStart 仓库路径)
-sudo cp /home/winbeau/opt/xju-api/deploy/xju-provision.service /etc/systemd/system/
+# 2) 构建当前 commit 镜像、初始化 desired image 并安装 systemd unit
+short_sha="$(git rev-parse --short=7 HEAD)"
+bash deploy/build-cliproxy.sh "deploy-$short_sha"
+printf 'CLIPROXY_IMAGE=winbeau/cli-proxy-api:deploy-%s\nCLIPROXY_ROLLBACK_IMAGE=\n' "$short_sha" \
+  > /opt/cli-proxy-api/.cliproxy-image.env
+chmod 600 /opt/cli-proxy-api/.cliproxy-image.env
+sudo install -m 0644 /home/winbeau/opt/xju-api/deploy/xju-provision.service \
+  /etc/systemd/system/xju-provision.service
 sudo systemctl daemon-reload && sudo systemctl enable --now xju-provision.service
 systemctl status xju-provision.service          # 应 active (running)
 # 3) new-api 容器要挂 /provision(run-newapi.sh 已含 -v /opt/xju-api/provision:/provision
@@ -202,15 +221,27 @@ bash /home/winbeau/opt/xju-api/deploy/prune-docker.sh
 # 临时调参:KEEP=3 CACHE_KEEP=5GB bash deploy/prune-docker.sh
 docker system df    # 看回收效果
 ```
-- 升级后新 tag verify 通过即可跑一次,回收被取代的旧构建。
-- 构建默认在 claude-tri 进行;重复构建后可运行 `bash deploy/prune-docker.sh` 回收旧镜像与 build cache。
+- 升级后新 tag verify 通过即可跑一次,回收被取代的旧构建。CLIProxyAPI 的一键部署默认不清理;确认稳定后显式运行 `KEEP=2 bash deploy/prune-docker.sh`。
+- CLIProxyAPI 构建默认在 claude-tri 进行;镜像 tag 为 `deploy-<提交SHA>`。重复构建后可运行 `bash deploy/prune-docker.sh` 回收旧镜像与 build cache。
 - `docker system df` 若因 containerd 遗留的缺失 snapshot 报错,清理脚本会记录警告并让总部署继续做 API/服务验活;按错误中的容器 ID 定位后再单独清理。
 
 ## 备份 / 恢复
 
-- 备份：[deploy/backup.sh](../deploy/backup.sh)，cron 每日 04:30，滚动保 7 份于 `/opt/backups/xju-api/`。
-- 恢复 new-api：停容器 → 用备份的 `one-api.db` 覆盖 `/opt/new-api/data/one-api.db` → 起容器。
-- 恢复 CLIProxyAPI：解包 `cli-proxy.tar.gz` 回 `/opt/cli-proxy-api/` → `docker compose restart`。
+- 备份：[deploy/backup.sh](../deploy/backup.sh)，cron 每日 04:30，滚动保 7 份于
+  `/opt/backups/xju-api/`。当前版本会备份 SQLite、`xju-pools.json`、全部
+  `config.<id>.yaml`、`.pool-mgmt-<id>.env`、`auths-<id>/`、
+  `.cliproxy-image.env` 及不含密钥的 fleet manifest；默认不备份池日志。
+- CLIProxy 部署器在 watcher 停止并取得 provision lock 后运行
+  `BACKUP_CADDY=0 bash deploy/backup.sh`，不读取 Caddy 私有目录；定时完整备份仍默认包含
+  Caddy。
+- 恢复 New API：停容器 → 用备份的 `one-api.db` 覆盖
+  `/opt/new-api/data/one-api.db` → 起容器。
+- 恢复动态 CLIProxy 数据：先停 `xju-provision` 并建立 maintenance，恢复 `xju-pools.json` 与
+  `cli-proxy-dynamic.tar.gz`，确认 `.cliproxy-image.env` 指向已存在的镜像，再按备份中的
+  `cliproxy-fleet.jsonl` 重建丢失的容器。若现役容器仍完整，只需运行
+  `PULL=0 BACKUP=0 bash deploy/deploy-cliproxy.sh --rollback <镜像>` 做整批版本回滚。
+  `deploy-cliproxy.sh` 出于安全考虑不会凭空重建一个完全丢失的 fleet。**不要**使用退役
+  compose 恢复动态池。
 - 恢复 Caddy：解包 `caddy.tar.gz` → `systemctl reload caddy`（证书目录一并恢复可免重签）。
 
 ## 排障速查
@@ -221,7 +252,7 @@ docker system df    # 看回收效果
 | 证书签不下来 | `journalctl -u caddy` | Cloudflare 橙云拦 ACME 挑战 → 先切「仅 DNS/灰云」（PLAN.md §9-6）；80/443 未放行 |
 | 用户请求 401 | 令牌状态/到期 | 日卡到期即时 401 属正常；复活走 `scripts/renew-card.sh`（两步，见 docs/daycard-api.md ②） |
 | 渠道测试失败 | new-api 渠道配置 | Base URL 应为 `http://127.0.0.1:8317`，Key= CLIProxyAPI `config.yaml` 的 `api-keys` 之一 |
-| 上游全部报错 | `docker logs cli-proxy-api` | 号池凭证过期 → 重新 OAuth（临时开回调口走 SSH 隧道，PLAN.md §8-2）；配额耗尽等冷却 |
+| 上游全部报错 | `docker logs cli-proxy-api-main` | 号池凭证过期 → 重新 OAuth（临时开回调口走 SSH 隧道，PLAN.md §8-2）；配额耗尽等冷却 |
 | 机器变慢 / OOM | `free -h`、`docker stats` | 本机内存只有 3.8Gi 且多项目共用 —— 不要再起新容器 |
 | 磁盘告警 | `df -h`、`docker system df` | 日志/旧镜像膨胀：`docker image prune`、查三处日志滚动是否生效（剩 ~11G 是最大风险，PLAN.md §9-4） |
 

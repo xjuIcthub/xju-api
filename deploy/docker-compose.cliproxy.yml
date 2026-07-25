@@ -1,9 +1,14 @@
+# RETIRED / DO NOT RUN.
+# 2026-07-16 起所有 CLIProxyAPI 池均由 provision watcher 管理为
+# cli-proxy-api-<id> 动态容器；常规升级使用 deploy/deploy-cliproxy.sh。
+# 本文件仅保留旧静态拓扑作破玻璃参考，docker compose up 会与 main/k12-pool 抢端口。
+#
 # deploy/docker-compose.cliproxy.yml — L2/L3 CLIProxyAPI(claude-tri)
 # 建议落位: /opt/cli-proxy-api/docker-compose.yml
 # 同目录放真实 config.yaml(参照 ./config.example.yaml 填写)与 auths/ 号池 —— 两者均被仓库 .gitignore 排除,永不入库
 services:
   cli-proxy-api:
-    image: winbeau/cli-proxy-api:v0.9.0 # 自建镜像(承载仓内 cliproxy 改动);构建见 deploy/build-cliproxy.sh
+    image: winbeau/cli-proxy-api:deploy-0000000 # 退役占位;禁止作为现役部署入口
     container_name: cli-proxy-api
     ports:
       # 仅绑回环;公网由 Caddy 的 codex.selab.top 反代(PLAN.md §8-1)
@@ -34,7 +39,7 @@ services:
   # K12 独立号池（第二实例）: 与 default 池完全隔离——独立 auth-dir / 内部 key / 管理密钥 / 端口。
   # new-api 靠渠道 group 字段路由: k12 卡只命中指向本实例的 cliproxy-pool-k12 渠道。
   cli-proxy-api-k12:
-    image: winbeau/cli-proxy-api:v0.9.0 # 与 default 池同镜像/同 tag
+    image: winbeau/cli-proxy-api:deploy-0000000 # 退役占位;禁止作为现役部署入口
     container_name: cli-proxy-api-k12
     ports:
       # 仅绑回环；K12 池无公网入口，只由 new-api 经 xju-net 内网访问

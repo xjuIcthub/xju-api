@@ -18,12 +18,15 @@ Requires=docker.service
 [Service]
 Type=simple
 User=winbeau
+UMask=0077
 # 仓库 clone 路径按实际改(claude-tri 现为 /home/winbeau/opt/xju-api)
 ExecStart=/home/winbeau/opt/xju-api/deploy/provision-poold.sh
+EnvironmentFile=/opt/cli-proxy-api/.cliproxy-image.env
 Environment=PROVISION_DIR=/opt/xju-api/provision
 Environment=CLIPROXY_DIR=/opt/cli-proxy-api
 Restart=always
 RestartSec=5
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

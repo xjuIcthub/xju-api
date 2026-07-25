@@ -17,11 +17,16 @@ set -uo pipefail
 
 PROVISION_DIR="${PROVISION_DIR:-/opt/xju-api/provision}"
 CLIPROXY_DIR="${CLIPROXY_DIR:-/opt/cli-proxy-api}"
-IMAGE="${CLIPROXY_IMAGE:-winbeau/cli-proxy-api:v0.9.2}"
-NETWORK="${XJU_NET:-xju-net}"
+IMAGE="${CLIPROXY_IMAGE:?CLIPROXY_IMAGE must be configured}"
 TEMPLATE="${CONFIG_TEMPLATE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.k12.example.yaml}"
 PRIVATE_TEMPLATE="${PRIVATE_CONFIG_TEMPLATE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.private.example.yaml}"
 POLL_INTERVAL="${POLL_INTERVAL:-3}"
+MAINTENANCE_FILE="${POOL_MAINTENANCE_FILE:-$PROVISION_DIR/.maintenance}"
+PROVISION_LOCK="${POOL_PROVISION_LOCK:-$PROVISION_DIR/.provision.lock}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=deploy/cliproxy-pool-runtime.sh
+source "$SCRIPT_DIR/cliproxy-pool-runtime.sh"
 
 REQ="$PROVISION_DIR/requests"
 RES="$PROVISION_DIR/results"
@@ -72,7 +77,6 @@ provision_create() { # id label port mode owner_user_id kind group_key
 		;;
 	esac
 	local mgmt key cfg envf url template_source
-	local -a resource_args=()
 	mgmt="$(openssl rand -hex 32)"
 	key="$(openssl rand -hex 32)"
 	cfg="$CLIPROXY_DIR/config.$id.yaml"
@@ -80,12 +84,6 @@ provision_create() { # id label port mode owner_user_id kind group_key
 	template_source="$TEMPLATE"
 	if [[ "$kind" == private ]]; then
 		template_source="$PRIVATE_TEMPLATE"
-		# Private pools are small, low-traffic instances. Bound a single user so
-		# ten pools cannot consume the whole host during a failure loop.
-		resource_args=(
-			--memory=256m --memory-reservation=64m --cpus=0.75 --pids-limit=128
-			--log-opt max-size=10m --log-opt max-file=2
-		)
 	fi
 	if [[ ! -f "$template_source" ]]; then
 		err_result "$id" "config template not found"
@@ -105,26 +103,13 @@ provision_create() { # id label port mode owner_user_id kind group_key
 	mkdir -p "$CLIPROXY_DIR/auths-$id" "$CLIPROXY_DIR/logs-$id"
 
 	docker rm -f "cli-proxy-api-$id" >/dev/null 2>&1 || true
-	if ! docker run -d --name "cli-proxy-api-$id" --restart unless-stopped \
-		--network "$NETWORK" -p "127.0.0.1:$port:$port" \
-		-v "$cfg":/CLIProxyAPI/config.yaml \
-		-v "$CLIPROXY_DIR/auths-$id":/root/.cli-proxy-api \
-		-v "$CLIPROXY_DIR/logs-$id":/CLIProxyAPI/logs \
-		--env-file "$envf" "${resource_args[@]}" "$IMAGE" >/dev/null; then
+	if ! cliproxy_start_pool "$id" "$port" "$kind" "$IMAGE" >/dev/null; then
 		err_result "$id" "docker run failed"
 		return
 	fi
 
 	# Wait for the instance to answer before reporting success.
-	local ok=0 i
-	for i in $(seq 1 20); do
-		if curl -fsS -m 2 "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
-			ok=1
-			break
-		fi
-		sleep 1
-	done
-	if ((ok == 0)); then
+	if ! cliproxy_wait_for_health "cli-proxy-api-$id" "$port"; then
 		err_result "$id" "instance did not become healthy"
 		return
 	fi
@@ -173,6 +158,14 @@ process_one() { # request-file
 	esac
 }
 
+process_one_locked() { # request-file
+	local f="$1" lock_fd
+	exec {lock_fd}>"$PROVISION_LOCK"
+	flock "$lock_fd"
+	process_one "$f"
+	exec {lock_fd}>&-
+}
+
 main() {
 	command -v jq >/dev/null || {
 		echo "need jq" >&2
@@ -182,12 +175,24 @@ main() {
 		echo "need docker" >&2
 		exit 1
 	}
+	command -v flock >/dev/null || {
+		echo "need flock" >&2
+		exit 1
+	}
+	docker image inspect "$IMAGE" >/dev/null 2>&1 || {
+		echo "configured CLIProxyAPI image not found: $IMAGE" >&2
+		exit 1
+	}
 	mkdir -p "$REQ" "$RES" "$DONE"
-	log "watching $REQ (interval ${POLL_INTERVAL}s, admin template $TEMPLATE, private template $PRIVATE_TEMPLATE)"
+	log "watching $REQ (image $IMAGE, interval ${POLL_INTERVAL}s, admin template $TEMPLATE, private template $PRIVATE_TEMPLATE)"
 	while true; do
+		if [[ -e "$MAINTENANCE_FILE" ]]; then
+			sleep "$POLL_INTERVAL"
+			continue
+		fi
 		for f in "$REQ"/*.json; do
 			[[ -e "$f" ]] || continue
-			process_one "$f"
+			process_one_locked "$f"
 			mv "$f" "$DONE/$(basename "$f" .json).$(date +%s).json" 2>/dev/null || rm -f "$f"
 		done
 		sleep "$POLL_INTERVAL"
