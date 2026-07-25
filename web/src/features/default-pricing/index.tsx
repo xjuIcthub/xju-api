@@ -31,7 +31,7 @@ import { getDefaultPoolPricing, updateDefaultPoolPricing } from './api'
 export function DefaultPricing() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [value, setValue] = useState('1')
+  const [value, setValue] = useState('')
   const pricingQuery = useQuery({
     queryKey: ['pool', 'default-pricing'],
     queryFn: getDefaultPoolPricing,
@@ -92,60 +92,78 @@ export function DefaultPricing() {
                 )}
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-5'>
-              {pricingQuery.isLoading ? (
-                <Skeleton className='h-10 w-full' />
-              ) : (
-                <div className='space-y-2'>
-                  <Label htmlFor='default-pool-multiplier'>
-                    {t('Multiplier')}
-                  </Label>
-                  <Input
-                    id='default-pool-multiplier'
-                    type='number'
-                    min='0.1'
-                    max='100'
-                    step='0.1'
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    aria-invalid={!valid}
-                  />
-                  <p className='text-muted-foreground text-xs'>
-                    {t('Allowed range: 0.1 to 100')}
-                  </p>
+            <CardContent>
+              {pricingQuery.isPending && (
+                <div className='space-y-5'>
+                  <Skeleton className='h-10 w-full' />
+                  <Skeleton className='h-20 w-full' />
                 </div>
               )}
-
-              <div className='bg-muted/30 flex items-center gap-3 rounded-xl border p-4'>
-                <div className='bg-background rounded-lg border p-2'>
-                  <Calculator className='size-5' />
+              {pricingQuery.isError && (
+                <div className='flex min-h-32 flex-col items-center justify-center gap-3 text-center'>
+                  <p className='text-destructive text-sm font-medium'>
+                    {t('Failed to load')}
+                  </p>
+                  <Button
+                    variant='outline'
+                    onClick={() => void pricingQuery.refetch()}
+                    disabled={pricingQuery.isFetching}
+                  >
+                    {t('Retry')}
+                  </Button>
                 </div>
-                <div>
-                  <div className='text-sm font-medium'>
-                    {t('Pricing preview')}
+              )}
+              {pricingQuery.isSuccess && (
+                <div className='space-y-5'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='default-pool-multiplier'>
+                      {t('Multiplier')}
+                    </Label>
+                    <Input
+                      id='default-pool-multiplier'
+                      type='number'
+                      min='0.1'
+                      max='100'
+                      step='0.1'
+                      value={value}
+                      onChange={(event) => setValue(event.target.value)}
+                      aria-invalid={!valid}
+                    />
+                    <p className='text-muted-foreground text-xs'>
+                      {t('Allowed range: 0.1 to 100')}
+                    </p>
                   </div>
-                  <div className='text-muted-foreground mt-0.5 text-xs'>
-                    {t(
-                      '$1.00 of base model usage deducts ${{amount}} from balance',
-                      {
-                        amount: preview,
-                      }
-                    )}
+
+                  <div className='bg-muted/30 flex items-center gap-3 rounded-xl border p-4'>
+                    <div className='bg-background rounded-lg border p-2'>
+                      <Calculator className='size-5' />
+                    </div>
+                    <div>
+                      <div className='text-sm font-medium'>
+                        {t('Pricing preview')}
+                      </div>
+                      <div className='text-muted-foreground mt-0.5 text-xs'>
+                        {t(
+                          '$1.00 of base model usage deducts ${{amount}} from balance',
+                          {
+                            amount: preview,
+                          }
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className='flex justify-end'>
+                    <Button
+                      onClick={() => updateMutation.mutate()}
+                      disabled={!valid || updateMutation.isPending}
+                    >
+                      <Save data-icon='inline-start' />
+                      {updateMutation.isPending ? t('Saving...') : t('Save')}
+                    </Button>
                   </div>
                 </div>
-              </div>
-
-              <div className='flex justify-end'>
-                <Button
-                  onClick={() => updateMutation.mutate()}
-                  disabled={
-                    !valid || pricingQuery.isLoading || updateMutation.isPending
-                  }
-                >
-                  <Save data-icon='inline-start' />
-                  {updateMutation.isPending ? t('Saving...') : t('Save')}
-                </Button>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

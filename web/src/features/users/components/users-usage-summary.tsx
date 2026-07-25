@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { BarChart3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatQuota } from '@/lib/format'
@@ -20,7 +21,7 @@ import { useUsers } from './users-provider'
 export function UsersUsageSummary() {
   const { t } = useTranslation()
   const { refreshTrigger } = useUsers()
-  const { data, isLoading } = useQuery({
+  const summaryQuery = useQuery({
     queryKey: ['users', 'summary', refreshTrigger],
     queryFn: async () => {
       const response = await getUsersSummary()
@@ -41,11 +42,25 @@ export function UsersUsageSummary() {
           <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
             {t('All Users Total Usage')}
           </div>
-          {isLoading ? (
-            <Skeleton className='mt-1 h-7 w-32' />
-          ) : (
+          {summaryQuery.isPending && <Skeleton className='mt-1 h-7 w-32' />}
+          {summaryQuery.isError && (
+            <div className='mt-1 flex flex-wrap items-center gap-2'>
+              <span className='text-destructive text-sm font-medium'>
+                {t('Failed to load')}
+              </span>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => void summaryQuery.refetch()}
+                disabled={summaryQuery.isFetching}
+              >
+                {t('Retry')}
+              </Button>
+            </div>
+          )}
+          {summaryQuery.isSuccess && (
             <div className='mt-0.5 font-mono text-xl font-bold tracking-tight tabular-nums'>
-              {formatQuota(data?.total_used_quota ?? 0)}
+              {formatQuota(summaryQuery.data.total_used_quota)}
             </div>
           )}
         </div>
