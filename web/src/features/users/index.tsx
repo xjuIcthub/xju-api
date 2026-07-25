@@ -39,7 +39,7 @@ function UsersContent() {
           <UsersPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='flex min-h-0 flex-1 flex-col gap-3'>
+          <div className='flex h-full min-h-0 flex-col gap-3'>
             <UsersUsageSummary />
             <div className='min-h-0 flex-1'>
               <UsersTable />
