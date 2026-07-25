@@ -27,6 +27,7 @@
 - **仅邀请注册** —— 一次性邀请码,一码一用。
 - **Codex 一键配置** —— 一键复制 `config.toml` / `auth.json`。
 - **用量看板** —— USD 与 token 双显。
+- **可靠用量记账** —— Codex stream/non-stream exactly-once 收口,中断与零 usage 不再从 CPA/Redis 漏记。
 - **Notion 风格前端** —— 极简换肤,裁掉用不上的功能。
 
 ## 进行中
@@ -58,14 +59,20 @@
 
 ## 部署
 
-开发改动在本机完成;`claude-tri` 通过 `deploy/deploy.sh` 一键完成拉取、护栏检查、前端/镜像构建、换容器、清理与验活。
+开发改动与前端发布物在本机完成；`claude-tri` 只拉取已提交代码并部署。New API 与
+CLIProxyAPI 使用独立入口：
 
 ```bash
-# 在 claude-tri 上(仓库 clone 于 /home/winbeau/opt/xju-api):
+# New API：先安装与 HEAD 匹配的前端发布物，再只编 Go 并换容器
 cd /home/winbeau/opt/xju-api
-bash deploy/deploy.sh
+PULL=0 SKIP_WEB=1 bash deploy/deploy.sh
+
+# CLIProxyAPI：只构建 Go，镜像固定为 deploy-<当前 7 位提交 SHA>
+bash deploy/deploy-cliproxy.sh --dry-run
+PRUNE=0 bash deploy/deploy-cliproxy.sh
 ```
 
+CLIProxyAPI 入口会逐池验活、失败自动回滚，并让未来新建号池使用同一 commit 镜像。
 编排见 [`deploy/`](./deploy/);升级、回滚、排障见 [docs/runbook.md](./docs/runbook.md)。
 
 ## 目录结构

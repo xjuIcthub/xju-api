@@ -1,7 +1,7 @@
 # 迭代记录 · CHANGELOG
 
 > 上线后的功能迭代与修复,按主题归档(非严格时序)。架构与机制的权威说明见 [PLAN.md](./PLAN.md) 与 [docs/architecture-and-pool-tech.md](./docs/architecture-and-pool-tech.md);enriched / 订阅日期方案见 [docs/pool-enrichment-design.md](./docs/pool-enrichment-design.md);逐条提交见 `git log`。
-> 当前线上镜像:**`winbeau/xju-newapi:v0.8.7`** + **`winbeau/cli-proxy-api:v0.8.6`**(部署机 `claude-tri`,`/home/winbeau/opt/xju-api`)。
+> 当前线上镜像：**`winbeau/xju-newapi:deploy-8b8bdfb`** + **`winbeau/cli-proxy-api:deploy-43116d2`**（部署机 `claude-tri`，仓库 `/home/winbeau/opt/xju-api`；CLIProxyAPI 于 2026-07-25 完成全部现役动态池升级）。
 
 ---
 
@@ -59,6 +59,9 @@
 
 ## 部署 / 构建
 
+- **Codex usage accounting 已上线**（2026-07-25）—— Codex 非流式/流式请求统一 exactly-once 收口：无 usage 的正常 completion 记零 token 成功，clean EOF、scanner error 和 completion 前取消记失败，失败时保留已观察到的部分 usage；缺失 `total_tokens` 时按 OpenAI 子集语义计算，不重复累加 reasoning/cache。补齐 helper、executor、Claude translator、race 与 Redis queue 回归，详见 [docs/bug-fix-July25.md](./docs/bug-fix-July25.md)。
+- **CLIProxyAPI commit 镜像一键部署** —— 新增 `deploy/deploy-cliproxy.sh`，镜像固定为 `deploy-<7位 Git SHA>`；自动发现现役动态池、非 main canary → 其余池 → main 顺序升级，保留私有池资源限制，部署期间暂停 provision，失败逆序回滚，成功后同步未来新池镜像。动态备份支持从 new-api 容器读取权限受限 registry，并用缓存 sudo 归档 root-owned OAuth 文件而不改原文件权限。
+- **2026-07-25 生产验收** —— `cli-proxy-api-main` 与数字池 `4–12` 共 10 个现役容器全部运行 `winbeau/cli-proxy-api:deploy-43116d2`；端口 `8317`、`8321–8329` 的 `/healthz` 全部正常，`xju-provision` 为 active，`.maintenance` 不存在；`.cliproxy-image.env` 记录当前镜像与 `v0.9.1` 回滚锚。
 - **构建加速** —— BuildKit 缓存挂载(`go build` 40s → 7s);去掉前端 build 的 cache mount(它会让旧 bundle 静默上线)。
 - **固定 `NODE_NAME`** —— 否则每次重部署在系统信息页留一个僵尸节点。
 - dev server 支持 HTTPS(否则本地登录失败)。

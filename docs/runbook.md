@@ -116,6 +116,11 @@ CLIProxyAPI 镜像固定为 `winbeau/cli-proxy-api:deploy-<当前 main 的 7 位
 未来新池始终使用同一 commit 镜像。任一池失败会逆序恢复本轮已升级池；若无法完整恢复，
 maintenance 会保留且 watcher 不启动，避免在不一致 fleet 上继续开池。
 
+- **2026-07-25 实际部署**：`main` 与数字池 `4–12` 共 10 个现役池已统一运行
+  `winbeau/cli-proxy-api:deploy-43116d2`；`8317`、`8321–8329` 逐池 `/healthz`
+  通过，`xju-provision` active，maintenance gate 已清除。当前精确回滚锚为
+  `winbeau/cli-proxy-api:v0.9.1`。
+
 默认 `PRUNE=0`，上一镜像作为回滚锚保留。确认稳定后运行：
 
 ```bash
