@@ -17,7 +17,7 @@ set -uo pipefail
 
 PROVISION_DIR="${PROVISION_DIR:-/opt/xju-api/provision}"
 CLIPROXY_DIR="${CLIPROXY_DIR:-/opt/cli-proxy-api}"
-IMAGE="${CLIPROXY_IMAGE:-winbeau/cli-proxy-api:v0.9.1}"
+IMAGE="${CLIPROXY_IMAGE:-winbeau/cli-proxy-api:v0.9.2}"
 NETWORK="${XJU_NET:-xju-net}"
 TEMPLATE="${CONFIG_TEMPLATE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.k12.example.yaml}"
 PRIVATE_TEMPLATE="${PRIVATE_CONFIG_TEMPLATE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.private.example.yaml}"
