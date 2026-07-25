@@ -233,7 +233,9 @@ docker system df    # 看回收效果
   `config.<id>.yaml`、`.pool-mgmt-<id>.env`、`auths-<id>/`、
   `.cliproxy-image.env` 及不含密钥的 fleet manifest；默认不备份池日志。
 - CLIProxy 部署器在 watcher 停止并取得 provision lock 后运行
-  `BACKUP_CADDY=0 bash deploy/backup.sh`，不读取 Caddy 私有目录；定时完整备份仍默认包含
+  `BACKUP_CADDY=0 bash deploy/backup.sh`。容器 root 写入的 OAuth 文件若宿主用户不可读，
+  备份脚本会使用部署开始时 `sudo -v` 缓存的授权执行 `sudo -n tar`，完成后把归档恢复为
+  调用用户所有、权限 600；不会批量修改 OAuth 文件本身的属主或权限。定时完整备份仍默认包含
   Caddy。
 - 恢复 New API：停容器 → 用备份的 `one-api.db` 覆盖
   `/opt/new-api/data/one-api.db` → 起容器。
