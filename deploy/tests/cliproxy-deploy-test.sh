@@ -59,6 +59,9 @@ assert_contains "$calls" '127.0.0.1:8317:8317'
 
 DEPLOY_TEXT="$(<"$DEPLOY")"
 assert_contains "$DEPLOY_TEXT" 'docker exec new-api cat /data/xju-pools.json'
+assert_contains "$(<"$REPO_ROOT/deploy/backup.sh")" 'find "$path" -type f ! -readable'
+assert_contains "$(<"$REPO_ROOT/deploy/backup.sh")" 'sudo -n tar czf "$archive"'
+assert_contains "$(<"$REPO_ROOT/deploy/backup.sh")" 'sudo -n chown "$(id -u):$(id -g)" "$archive"'
 assert_contains "$DEPLOY_TEXT" '[[ -r "$POOL_REGISTRY_FILE" ]]'
 assert_contains "$DEPLOY_TEXT" 'TARGET_IMAGE="$HEAD_IMAGE"'
 assert_contains "$DEPLOY_TEXT" 'dry-run 完成,未修改 Docker/systemd/运行文件'

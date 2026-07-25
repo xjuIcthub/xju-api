@@ -58,8 +58,35 @@ mapfile -d '' pool_paths < <(
 	echo "no dynamic pool files found in $CLIPROXY_DIR" >&2
 	exit 1
 }
-tar czf "$DEST/cli-proxy-dynamic.tar.gz" --absolute-names "${pool_paths[@]}"
-tar tzf "$DEST/cli-proxy-dynamic.tar.gz" >/dev/null
+archive="$DEST/cli-proxy-dynamic.tar.gz"
+needs_sudo=0
+for path in "${pool_paths[@]}"; do
+	if [[ -d "$path" ]]; then
+		if find "$path" -type f ! -readable -print -quit | grep -q .; then
+			needs_sudo=1
+			break
+		fi
+	elif [[ ! -r "$path" ]]; then
+		needs_sudo=1
+		break
+	fi
+done
+if ((needs_sudo == 1)); then
+	command -v sudo >/dev/null 2>&1 || {
+		echo "dynamic pool files require sudo for backup" >&2
+		exit 1
+	}
+	sudo -n true >/dev/null 2>&1 || {
+		echo "dynamic pool files require cached sudo authorization" >&2
+		exit 1
+	}
+	sudo -n tar czf "$archive" --absolute-names "${pool_paths[@]}"
+	sudo -n chown "$(id -u):$(id -g)" "$archive"
+	chmod 600 "$archive"
+else
+	tar czf "$archive" --absolute-names "${pool_paths[@]}"
+fi
+tar tzf "$archive" >/dev/null
 
 # 3) 不含密钥的 fleet manifest，便于恢复时核对镜像/端口/挂载。
 {
