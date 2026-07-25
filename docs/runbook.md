@@ -22,7 +22,8 @@ Default 付费池**首次上线**还有一次性数据步骤，必须先完整�
 [default-paid-pool.md](./default-paid-pool.md)：停止旧版 new-api 后先 dry-run，再运行
 `scripts/reset-default-balances.sh --apply /opt/new-api/data/one-api.db`；只有脚本成功、
 备份与 SHA-256 已记录后才能启动新镜像。不能先启新版本再清零。脚本会同时把在线
-支付总开关写为关闭，支付渠道和法币比例未确定前不得开启。
+支付总开关写为关闭；当前只使用兑换码充值，运营口径为 `¥1 = $100` Default
+额度。在线支付未经单独评估、配置和验收前不得开启。
 
 先在 Codex-vps 的干净、已提交工作树中构建并打包。打包脚本会重新执行
 `bun run typecheck` 与 `bun run build`，把当前完整 Git SHA 和静态文件树哈希写入

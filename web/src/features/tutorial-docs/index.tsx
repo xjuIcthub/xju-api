@@ -9,12 +9,16 @@ License, or (at your option) any later version.
 import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
+  BadgeDollarSign,
+  BarChart3,
   BookOpenText,
   Box,
   CheckCircle2,
+  Gift,
   KeyRound,
   MonitorCog,
   ShieldCheck,
+  type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,6 +34,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { DEFAULT_POOL_REDEMPTION_RATE_LABEL } from '@/lib/default-pool'
 
 const OPENAI_ENDPOINT = 'https://api.selab.top/v1'
 const CLAUDE_ENDPOINT = 'https://api.selab.top'
@@ -37,29 +42,60 @@ const CLAUDE_ENDPOINT = 'https://api.selab.top'
 const COPY = {
   zh: {
     intro:
-      '从创建私人号池到接入 Claude Code、Codex 与 OpenAI 兼容客户端，按下面顺序完成即可。',
+      '你可以直接使用 Default 共享号池，也可以接入自己的私人号池；选择一条路线完成后，再配置 Claude Code、Codex 或其他兼容客户端。',
     start: '推荐配置流程',
-    steps: [
-      {
-        title: '创建私人号池',
-        description: '进入“我的号池”并创建属于当前账号的隔离号池。',
-      },
-      {
-        title: '导入并验证账号',
-        description:
-          '支持登录导入、CPA/Sub2 JSON、上传、粘贴和 ZIP；至少保持一个账号在线。',
-      },
-      {
-        title: '创建 API 密钥',
-        description:
-          '新建密钥会默认锁定到你的私人号池，私人号池不限用户额度但仍统计用量。',
-      },
-      {
-        title: '配置客户端',
-        description:
-          '在 API 密钥行点击 Codex 或 CC Switch 图标，可生成对应配置并复制。',
-      },
-    ],
+    defaultFlow: {
+      title: '使用 Default 号池',
+      description:
+        '无需准备上游账号，兑换额度后即可使用；Default 请求会按当前倍率消耗账户额度。',
+      steps: [
+        {
+          title: '兑换 Default 额度',
+          description: `进入“额度充值”输入兑换码。当前兑换标准为 ${DEFAULT_POOL_REDEMPTION_RATE_LABEL} 额度。`,
+        },
+        {
+          title: '创建 API 密钥',
+          description: '进入“API 密钥”新建密钥，并将分组明确选择为 Default。',
+        },
+        {
+          title: '配置客户端',
+          description:
+            '在 API 密钥行点击 Codex 或 CC Switch 图标，生成并复制对应配置。',
+        },
+        {
+          title: '查看余额与用量',
+          description:
+            '在“额度充值”查看余额，在用量记录中查看请求消耗；余额不足时先兑换新额度。',
+        },
+      ],
+    },
+    privateFlow: {
+      title: '使用私人号池',
+      description:
+        '使用你自己的上游账号，不检查也不扣减 Default 额度，但请求仍会正常记录用量。',
+      steps: [
+        {
+          title: '创建私人号池',
+          description: '进入“我的号池”并创建属于当前账号的隔离号池。',
+        },
+        {
+          title: '导入并验证账号',
+          description:
+            '支持登录导入、CPA/Sub2 JSON、上传、粘贴和 ZIP；至少保持一个账号在线。',
+        },
+        {
+          title: '创建 API 密钥',
+          description:
+            '新建密钥会默认锁定到你的私人号池，私人号池不限用户额度但仍统计用量。',
+        },
+        {
+          title: '配置客户端',
+          description:
+            '在 API 密钥行点击 Codex 或 CC Switch 图标，可生成对应配置并复制。',
+        },
+      ],
+    },
+    openRecharge: '兑换 Default 额度',
     openPool: '打开我的号池',
     openKeys: '管理 API 密钥',
     endpoints: '客户端端点',
@@ -79,30 +115,62 @@ const COPY = {
   },
   en: {
     intro:
-      'Follow this sequence to create a private pool and connect Claude Code, Codex, or any OpenAI-compatible client.',
+      'Use the shared Default pool or connect your own private pool, then configure Claude Code, Codex, or another compatible client.',
     start: 'Recommended setup flow',
-    steps: [
-      {
-        title: 'Create a private pool',
-        description:
-          'Open My Pool and provision an isolated pool for your account.',
-      },
-      {
-        title: 'Import and verify accounts',
-        description:
-          'Use login import, CPA/Sub2 JSON, upload, paste, or ZIP, then keep at least one account online.',
-      },
-      {
-        title: 'Create an API key',
-        description:
-          'New keys route to your private pool by default. Usage is unlimited by user quota but remains metered.',
-      },
-      {
-        title: 'Configure a client',
-        description:
-          'Use the Codex or CC Switch icon on an API key row to generate and copy the client configuration.',
-      },
-    ],
+    defaultFlow: {
+      title: 'Use the Default pool',
+      description:
+        'No upstream account is required. Redeem balance first; Default requests consume it at the current multiplier.',
+      steps: [
+        {
+          title: 'Redeem Default balance',
+          description: `Enter a code on Balance Recharge. The current conversion is ${DEFAULT_POOL_REDEMPTION_RATE_LABEL} in balance.`,
+        },
+        {
+          title: 'Create an API key',
+          description:
+            'Create a key on the API Keys page and explicitly select the Default group.',
+        },
+        {
+          title: 'Configure a client',
+          description:
+            'Use the Codex or CC Switch icon on the key row to generate and copy its configuration.',
+        },
+        {
+          title: 'Track balance and usage',
+          description:
+            'Check remaining balance on Balance Recharge and request consumption in usage logs.',
+        },
+      ],
+    },
+    privateFlow: {
+      title: 'Use a private pool',
+      description:
+        'Use your own upstream accounts without checking or deducting Default balance; requests remain metered.',
+      steps: [
+        {
+          title: 'Create a private pool',
+          description:
+            'Open My Pool and provision an isolated pool for your account.',
+        },
+        {
+          title: 'Import and verify accounts',
+          description:
+            'Use login import, CPA/Sub2 JSON, upload, paste, or ZIP, then keep at least one account online.',
+        },
+        {
+          title: 'Create an API key',
+          description:
+            'New keys route to your private pool by default. Usage is unlimited by user quota but remains metered.',
+        },
+        {
+          title: 'Configure a client',
+          description:
+            'Use the Codex or CC Switch icon on an API key row to generate and copy the client configuration.',
+        },
+      ],
+    },
+    openRecharge: 'Redeem Default balance',
     openPool: 'Open My Pool',
     openKeys: 'Manage API keys',
     endpoints: 'Client endpoints',
@@ -125,7 +193,60 @@ const COPY = {
   },
 } as const
 
-const STEP_ICONS = [Box, ShieldCheck, KeyRound, MonitorCog] as const
+const DEFAULT_STEP_ICONS = [Gift, KeyRound, MonitorCog, BarChart3] as const
+const PRIVATE_STEP_ICONS = [Box, ShieldCheck, KeyRound, MonitorCog] as const
+
+interface SetupFlowProps {
+  flow: {
+    title: string
+    description: string
+    steps: readonly {
+      title: string
+      description: string
+    }[]
+  }
+  icons: readonly LucideIcon[]
+  icon: LucideIcon
+}
+
+function SetupFlow({ flow, icons, icon: FlowIcon }: SetupFlowProps) {
+  return (
+    <div className='space-y-3'>
+      <div className='flex items-start gap-3'>
+        <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
+          <FlowIcon className='size-5' />
+        </div>
+        <div>
+          <h3 className='font-serif text-base font-semibold'>{flow.title}</h3>
+          <p className='text-muted-foreground mt-1 text-sm leading-5'>
+            {flow.description}
+          </p>
+        </div>
+      </div>
+      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+        {flow.steps.map((step, index) => {
+          const Icon = icons[index]
+          return (
+            <Card key={step.title} data-card-hover='false'>
+              <CardHeader className='gap-3'>
+                <div className='flex items-center justify-between gap-2'>
+                  <div className='bg-muted flex size-9 items-center justify-center rounded-lg'>
+                    <Icon className='size-5' />
+                  </div>
+                  <Badge variant='secondary'>{index + 1}</Badge>
+                </div>
+                <CardTitle className='text-base'>{step.title}</CardTitle>
+                <CardDescription className='leading-5'>
+                  {step.description}
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export function TutorialDocumentation() {
   const { t, i18n } = useTranslation()
@@ -154,9 +275,12 @@ export function TutorialDocumentation() {
                 </div>
               </div>
               <div className='flex shrink-0 flex-wrap gap-2'>
-                <Button render={<Link to='/my-pool' />}>
-                  {copy.openPool}
+                <Button render={<Link to='/recharge' />}>
+                  {copy.openRecharge}
                   <ArrowRight />
+                </Button>
+                <Button variant='outline' render={<Link to='/my-pool' />}>
+                  {copy.openPool}
                 </Button>
                 <Button variant='outline' render={<Link to='/keys' />}>
                   {copy.openKeys}
@@ -170,26 +294,17 @@ export function TutorialDocumentation() {
               <CheckCircle2 className='text-success size-5' />
               <h2 className='font-serif text-lg font-semibold'>{copy.start}</h2>
             </div>
-            <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-              {copy.steps.map((step, index) => {
-                const Icon = STEP_ICONS[index]
-                return (
-                  <Card key={step.title} data-card-hover='false'>
-                    <CardHeader className='gap-3'>
-                      <div className='flex items-center justify-between gap-2'>
-                        <div className='bg-muted flex size-9 items-center justify-center rounded-lg'>
-                          <Icon className='size-5' />
-                        </div>
-                        <Badge variant='secondary'>{index + 1}</Badge>
-                      </div>
-                      <CardTitle className='text-base'>{step.title}</CardTitle>
-                      <CardDescription className='leading-5'>
-                        {step.description}
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                )
-              })}
+            <div className='space-y-6'>
+              <SetupFlow
+                flow={copy.defaultFlow}
+                icons={DEFAULT_STEP_ICONS}
+                icon={BadgeDollarSign}
+              />
+              <SetupFlow
+                flow={copy.privateFlow}
+                icons={PRIVATE_STEP_ICONS}
+                icon={Box}
+              />
             </div>
           </section>
 

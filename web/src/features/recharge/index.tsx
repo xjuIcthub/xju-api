@@ -39,6 +39,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getSelf } from '@/lib/api'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { formatCurrencyFromUSD } from '@/lib/currency'
+import {
+  DEFAULT_POOL_REDEMPTION_RATE_LABEL,
+  DEFAULT_POOL_USD_CREDIT_PER_CNY,
+} from '@/lib/default-pool'
 import { formatQuota, formatTimestamp } from '@/lib/format'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 
@@ -378,7 +382,8 @@ export function Recharge() {
                   {paymentConfigured(info)
                     ? t('Configured payment channels are listed below.')
                     : t(
-                        'Online payment is being prepared. Redemption codes remain available when enabled.'
+                        'Only redemption-code recharge is available. Current conversion: ¥1 = ${{amount}} Default balance.',
+                        { amount: DEFAULT_POOL_USD_CREDIT_PER_CNY }
                       )}
                 </CardDescription>
               </CardHeader>
@@ -416,6 +421,12 @@ export function Recharge() {
                     <Gift className='size-4' />
                     {t('Redemption Code')}
                   </div>
+                  <p className='text-muted-foreground mb-3 text-xs leading-5'>
+                    {t('Contact an administrator for a code. Current rate:')}{' '}
+                    <span className='text-foreground font-medium'>
+                      {DEFAULT_POOL_REDEMPTION_RATE_LABEL}
+                    </span>
+                  </p>
                   <div className='flex gap-2'>
                     <Input
                       value={code}

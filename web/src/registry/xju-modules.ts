@@ -107,7 +107,7 @@ export const XJU_SIDEBAR_MODULE_META: Record<
     docs: {
       titleKey: 'Tutorial Documentation',
       descriptionKey:
-        'Step-by-step guides for private pools, API keys, and client setup.',
+        'Step-by-step guides for Default and private pools, API keys, and client setup.',
     },
   },
   personal: {
