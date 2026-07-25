@@ -108,6 +108,9 @@ import {
 } from '@/features/pool/workbench-utils'
 import { useStatus } from '@/hooks/use-status'
 import { api } from '@/lib/api'
+import { ROLE } from '@/lib/roles'
+import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 function poolDisplayLabel(pool: PoolInfo): string {
   if (pool.kind !== 'private') return pool.label
@@ -118,6 +121,8 @@ export function Pool() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { status } = useStatus()
+  const role = useAuthStore((state) => state.auth.user?.role ?? ROLE.GUEST)
+  const canManage = role >= ROLE.ADMIN
   const [content, setContent] = useState('')
   const [pool, setPool] = useState('default')
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
@@ -275,7 +280,7 @@ export function Pool() {
   // / quota auto-reset) — they all write one option key and refresh /status.
   const optionMutation = useMutation({
     mutationFn: (args: { key: string; value: string }) =>
-      api.put('/api/option/', args),
+      api.put('/api/pool/settings', args),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['status'] })
       toast.success(t('Saved successfully'))
@@ -326,7 +331,8 @@ export function Pool() {
 
   // xju-api:new — single-account verify (report-only, never changes state).
   const verifyMutation = useMutation({
-    mutationFn: (name: string) => verifyPoolAuthFile(pool, name, heavyProbe),
+    mutationFn: (name: string) =>
+      verifyPoolAuthFile(pool, name, canManage && heavyProbe),
     onSuccess: (result) =>
       setVerdicts((prev) => ({ ...prev, [result.name]: result })),
     onError: (error: Error) => toast.error(error.message),
@@ -344,7 +350,7 @@ export function Pool() {
   const progressQuery = useQuery({
     queryKey: ['pool', 'verify', pool],
     queryFn: () => getVerifyProgress(pool),
-    enabled: poolConfigured,
+    enabled: canManage && poolConfigured,
     // Poll while a run is in flight; otherwise leave the last snapshot in place.
     refetchInterval: (query) => (query.state.data?.running ? 2000 : false),
   })
@@ -470,6 +476,9 @@ export function Pool() {
   const verifyingName = verifyMutation.isPending
     ? verifyMutation.variables
     : null
+  let accessLabel = t('Read-only')
+  if (canManage) accessLabel = t('Admin')
+  if (role >= ROLE.SUPER_ADMIN) accessLabel = t('Root')
 
   return (
     <SectionPageLayout>
@@ -477,7 +486,7 @@ export function Pool() {
         <span className='inline-flex min-w-0 items-center gap-2'>
           <span className='truncate'>{t('Account Pool')}</span>
           <Badge variant='outline' className='shrink-0'>
-            Root
+            {accessLabel}
           </Badge>
         </span>
       </SectionPageLayout.Title>
@@ -501,18 +510,33 @@ export function Pool() {
             className='w-48 sm:w-60'
           />
         )}
-        <Button
-          type='button'
-          variant='outline'
-          size='sm'
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className='size-4' />
-          {t('New pool')}
-        </Button>
+        {canManage && (
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className='size-4' />
+            {t('New pool')}
+          </Button>
+        )}
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]'>
+        {!canManage && (
+          <div className='border-border bg-muted/40 text-muted-foreground mb-4 rounded-md border px-4 py-3 text-sm'>
+            {t(
+              'Shared pools are read-only for regular users. You can only test account availability and check quota; use My Pool to manage your own accounts.'
+            )}
+          </div>
+        )}
+        <div
+          className={
+            canManage
+              ? 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]'
+              : 'grid gap-4'
+          }
+        >
           {/* Accounts list */}
           <Card data-card-hover='false'>
             <CardHeader className='flex flex-row items-start justify-between gap-3 space-y-0'>
@@ -558,7 +582,7 @@ export function Pool() {
                 <div className='flex items-center gap-2'>
                   {/* xju-api:new — rename a dynamically-created pool (display
                       label + its channel display name). */}
-                  {isDynamicPool(pool) && (
+                  {canManage && isDynamicPool(pool) && (
                     <Button
                       type='button'
                       variant='outline'
@@ -575,7 +599,7 @@ export function Pool() {
                   )}
                   {/* xju-api:new — delete a dynamically-created pool; the
                       env-seeded default/k12 pools cannot be removed here. */}
-                  {isDynamicPool(pool) && (
+                  {canManage && isDynamicPool(pool) && (
                     <Button
                       type='button'
                       variant='outline'
@@ -798,7 +822,7 @@ export function Pool() {
                                 <Gauge className='size-4' />
                               )}
                             </Button>
-                            {(usage?.reset_credits ?? 0) > 0 && (
+                            {canManage && (usage?.reset_credits ?? 0) > 0 && (
                               <Button
                                 type='button'
                                 variant='ghost'
@@ -819,7 +843,10 @@ export function Pool() {
                                 file.disabled ? t('Enable') : t('Disable')
                               }
                               title={file.disabled ? t('Enable') : t('Disable')}
-                              className={file.disabled ? 'text-success' : ''}
+                              className={cn(
+                                !canManage && 'hidden',
+                                file.disabled && 'text-success'
+                              )}
                               onClick={() =>
                                 toggleMutation.mutate({
                                   name: file.name,
@@ -834,7 +861,10 @@ export function Pool() {
                               type='button'
                               variant='ghost'
                               size='icon-sm'
-                              className='text-destructive hover:text-destructive'
+                              className={cn(
+                                'text-destructive hover:text-destructive',
+                                !canManage && 'hidden'
+                              )}
                               aria-label={t('Remove')}
                               title={t('Remove')}
                               onClick={() => deleteMutation.mutate(file.name)}
@@ -853,7 +883,7 @@ export function Pool() {
           </Card>
 
           {/* Right column: add + auto-clean */}
-          <div className='grid content-start gap-4'>
+          <div className={canManage ? 'grid content-start gap-4' : 'hidden'}>
             <Card data-card-hover='false'>
               <CardHeader>
                 <CardTitle className='text-base'>{t('Add account')}</CardTitle>

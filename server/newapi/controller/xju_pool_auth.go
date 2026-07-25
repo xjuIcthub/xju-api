@@ -27,8 +27,9 @@ import (
 // codex auth JSON into the pool, which CLIProxyAPI exposes through its
 // management API (`/v0/management/auth-files`). That API is bound to the
 // internal network and gated by a management secret, so the browser can neither
-// reach it nor be trusted with the secret. These handlers are the thin,
-// root-only bridge: the secret lives only here, in this process's environment.
+// reach it nor be trusted with the secret. These handlers are the thin bridge:
+// the secret lives only here, in this process's environment. Shared read-only
+// responses are sanitized before they reach common users.
 //
 //   POOL_MGMT_URL     base URL of the pool management API
 //                     (default http://cli-proxy-api:8317 — the docker service name)
@@ -60,7 +61,7 @@ func poolMgmtProxy(c *gin.Context, poolID, method, path string, body io.Reader, 
 		return false
 	}
 	if status >= 200 && status < 300 {
-		if isPrivatePoolRequest(c) && method == http.MethodGet && path == "/v0/management/auth-files" {
+		if shouldSanitizePoolResponse(c) && method == http.MethodGet && path == "/v0/management/auth-files" {
 			payload, err = sanitizePrivatePoolAuthList(payload)
 			if err != nil {
 				c.JSON(http.StatusBadGateway, gin.H{
@@ -93,8 +94,16 @@ func isPrivatePoolRequest(c *gin.Context) bool {
 	return c.GetBool(common.ContextKeyPrivatePoolScope)
 }
 
+func isPoolReadOnlyRequest(c *gin.Context) bool {
+	return c.GetBool(common.ContextKeyPoolReadOnly)
+}
+
+func shouldSanitizePoolResponse(c *gin.Context) bool {
+	return isPrivatePoolRequest(c) || isPoolReadOnlyRequest(c)
+}
+
 func recordPoolAudit(c *gin.Context, action string, params map[string]interface{}) {
-	if isPrivatePoolRequest(c) {
+	if shouldSanitizePoolResponse(c) {
 		recordUserSecurityAudit(c, c.GetInt("id"), action, params)
 		return
 	}
@@ -137,7 +146,7 @@ func sanitizePrivatePoolValue(value any) any {
 }
 
 func writePoolSuccessData(c *gin.Context, data any) {
-	if !isPrivatePoolRequest(c) {
+	if !shouldSanitizePoolResponse(c) {
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 		return
 	}
@@ -157,7 +166,10 @@ func writePoolSuccessData(c *gin.Context, data any) {
 // ListPools GET /api/pool/pools — the configured pools (default + k12) so the
 // frontend can render a pool selector and hide unconfigured pools.
 func ListPools(c *gin.Context) {
-	pools := common.ListConfiguredPools()
+	pools := common.ListSharedPools()
+	if c.GetInt("role") >= common.RoleRootUser {
+		pools = common.ListConfiguredPools()
+	}
 	for i := range pools {
 		if pools[i].OwnerUserID <= 0 {
 			continue
@@ -167,6 +179,39 @@ func ListPools(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": pools})
+}
+
+var sharedPoolSettingKeys = map[string]bool{
+	"PoolAutoCleanEnabled":        true,
+	"PoolUsageAutoRefreshEnabled": true,
+	"PoolUsageAutoResetEnabled":   true,
+}
+
+// UpdateSharedPoolSetting PUT /api/pool/settings — narrow admin surface for
+// the three shared-pool automation switches. It deliberately does not expose
+// the root-only generic option endpoint to role-10 administrators.
+func UpdateSharedPoolSetting(c *gin.Context) {
+	var req OptionUpdateRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid request body"})
+		return
+	}
+	key := strings.TrimSpace(req.Key)
+	if !sharedPoolSettingKeys[key] {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "pool setting is not allowed"})
+		return
+	}
+	value, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprintf("%v", req.Value)))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "setting value must be true or false"})
+		return
+	}
+	if err := model.UpdateOption(key, strconv.FormatBool(value)); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "option.update", map[string]interface{}{"key": key})
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 // GetPrivatePool GET /api/private-pool — current user's pool lifecycle state.
@@ -663,6 +708,11 @@ func VerifyPoolAuthFile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "name is required"})
 		return
 	}
+	if isPoolReadOnlyRequest(c) {
+		// The deep probe performs a tiny inference. Shared read-only users get the
+		// zero-quota light probe even if they forge heavy=true in a direct request.
+		reqBody.Heavy = false
+	}
 	result, err := service.ProbeAuthByName(poolIDFromRequest(c), name, reqBody.Heavy)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
@@ -757,6 +807,13 @@ func RefreshPoolAccountUsage(c *gin.Context) {
 			return
 		}
 		writePoolSuccessData(c, usage)
+		return
+	}
+	if isPoolReadOnlyRequest(c) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "read-only users may refresh one account at a time",
+		})
 		return
 	}
 
@@ -860,6 +917,9 @@ func DeletePoolInstance(c *gin.Context) {
 		return
 	}
 	poolID := strings.TrimSpace(reqBody.PoolID)
+	if !canManagePrivatePoolFromSharedRoute(c, poolID) {
+		return
+	}
 	if err := service.DeletePoolInstance(poolID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
@@ -884,6 +944,9 @@ func RenamePoolInstance(c *gin.Context) {
 		return
 	}
 	poolID := strings.TrimSpace(reqBody.PoolID)
+	if !canManagePrivatePoolFromSharedRoute(c, poolID) {
+		return
+	}
 	if err := service.RenamePool(poolID, reqBody.Label); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
@@ -893,6 +956,24 @@ func RenamePoolInstance(c *gin.Context) {
 		"label": strings.TrimSpace(reqBody.Label),
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// Admins manage shared pools; root retains the existing global recovery path.
+// This closes the body-id gap for rename/delete, which cannot use the query-
+// scoped middleware that protects the rest of /api/pool.
+func canManagePrivatePoolFromSharedRoute(c *gin.Context, poolID string) bool {
+	if c.GetInt("role") >= common.RoleRootUser {
+		return true
+	}
+	entry, ok := common.GetPoolEntry(poolID)
+	if !ok || entry.Kind != common.PoolKindPrivate {
+		return true
+	}
+	c.JSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"message": "private pools can only be managed by their owner or root",
+	})
+	return false
 }
 
 // GetPoolCreateStatus GET /api/pool/create/status?id=xxx — poll provisioning

@@ -68,6 +68,34 @@ func TestListConfiguredPools(t *testing.T) {
 	assert.Equal(t, "k12", pools[1].ID)
 }
 
+func TestListSharedPoolsExcludesUserOwnedPools(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "pools.json")
+	t.Setenv("POOL_REGISTRY_FILE", file)
+	t.Setenv("POOL_MGMT_SECRET", "default-secret")
+	t.Setenv("POOL_K12_MGMT_SECRET", "")
+	resetPoolRegCache()
+	t.Cleanup(resetPoolRegCache)
+
+	require.NoError(t, AddPoolToRegistry(PoolEntry{
+		ID: "team", Label: "Team", MgmtURL: "http://team:8319", MgmtSecret: "team-secret", Kind: PoolKindAdmin,
+	}))
+	require.NoError(t, AddPoolToRegistry(PoolEntry{
+		ID: "alice", Label: "Alice", MgmtURL: "http://alice:8320", MgmtSecret: "alice-secret",
+		OwnerUserID: 42, Kind: PoolKindPrivate,
+	}))
+
+	shared := ListSharedPools()
+	require.Len(t, shared, 2)
+	assert.Equal(t, []string{"default", "team"}, []string{shared[0].ID, shared[1].ID})
+
+	privatePool, ok := FindConfiguredPoolInfo("alice")
+	require.True(t, ok)
+	assert.Equal(t, PoolKindPrivate, privatePool.Kind)
+	defaultPool, ok := FindConfiguredPoolInfo("")
+	require.True(t, ok)
+	assert.Equal(t, "default", defaultPool.ID)
+}
+
 // xju-api:new — dynamic pool registry (号池验活 Part A / #4 Phase A): env-seeded
 // default/k12 plus file-backed dynamic pools, with add/remove/port allocation.
 

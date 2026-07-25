@@ -201,35 +201,53 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/waffo-pancake/subscription-product-options", controller.ListWaffoPancakeSubscriptionProductOptions)
 		}
 
-		// xju-api:inject — account-pool auth files (root only). Proxies to the CLIProxyAPI
-		// management API so an operator can paste a codex auth.json into the pool
-		// from the browser instead of scp + container restart.
-		poolRoute := apiRouter.Group("/pool")
-		poolRoute.Use(middleware.RootAuth())
+		// xju-api:inject — shared account-pool workbench. Every authenticated user
+		// may list shared pools, inspect their sanitized account list, and run a
+		// single light health/quota probe. All maintenance remains admin/root only;
+		// private-pool management stays on the implicit-owner routes below.
+		poolReadRoute := apiRouter.Group("/pool")
+		poolReadRoute.Use(middleware.UserAuth())
 		{
-			poolRoute.GET("/pools", controller.ListPools)
-			poolRoute.GET("/default-pricing", controller.GetDefaultPoolPricing)
-			poolRoute.PUT("/default-pricing", controller.UpdateDefaultPoolPricing)
-			poolRoute.POST("/create", controller.CreatePoolInstance)
-			poolRoute.GET("/create/status", controller.GetPoolCreateStatus)
-			poolRoute.POST("/delete", controller.DeletePoolInstance)
-			poolRoute.POST("/rename", controller.RenamePoolInstance)
-			poolRoute.GET("/auth-files", controller.ListPoolAuthFiles)
-			poolRoute.POST("/auth-files", controller.AddPoolAuthFile)
-			poolRoute.POST("/auth-files/import", controller.ImportPoolAuthFiles)
-			poolRoute.POST("/auth-files/clean", controller.CleanPoolAuthFilesNow)
-			poolRoute.POST("/auth-files/verify", controller.VerifyPoolAuthFile)
-			poolRoute.POST("/auth-files/verify-all", controller.VerifyPoolAuthFilesNow)
-			poolRoute.GET("/auth-files/verify-all/progress", controller.GetVerifyPoolProgress)
-			poolRoute.GET("/auth-files/usage", controller.GetPoolAccountUsage)
-			poolRoute.POST("/auth-files/usage/refresh", controller.RefreshPoolAccountUsage)
-			poolRoute.POST("/auth-files/usage/reset", controller.ResetPoolAccountQuota)
-			poolRoute.PATCH("/auth-files/status", controller.SetPoolAuthFileStatus)
-			poolRoute.DELETE("/auth-files", controller.DeletePoolAuthFile)
-			poolRoute.POST("/oauth/codex/start", controller.StartPoolCodexOAuth)
-			poolRoute.POST("/oauth/codex/callback", controller.SubmitPrivatePoolCodexOAuthCallback)
-			poolRoute.GET("/oauth/codex/status", controller.GetPrivatePoolCodexOAuthStatus)
-			poolRoute.DELETE("/oauth/codex/session", controller.CancelPrivatePoolCodexOAuth)
+			poolReadRoute.GET("/pools", controller.ListPools)
+
+			poolReadScopedRoute := poolReadRoute.Group("")
+			poolReadScopedRoute.Use(middleware.SharedPoolScope())
+			{
+				poolReadScopedRoute.GET("/auth-files", controller.ListPoolAuthFiles)
+				poolReadScopedRoute.POST("/auth-files/verify", controller.VerifyPoolAuthFile)
+				poolReadScopedRoute.GET("/auth-files/usage", controller.GetPoolAccountUsage)
+				poolReadScopedRoute.POST("/auth-files/usage/refresh", controller.RefreshPoolAccountUsage)
+			}
+		}
+
+		poolManageRoute := apiRouter.Group("/pool")
+		poolManageRoute.Use(middleware.AdminAuth())
+		{
+			poolManageRoute.GET("/default-pricing", controller.GetDefaultPoolPricing)
+			poolManageRoute.PUT("/default-pricing", controller.UpdateDefaultPoolPricing)
+			poolManageRoute.PUT("/settings", controller.UpdateSharedPoolSetting)
+			poolManageRoute.POST("/create", controller.CreatePoolInstance)
+			poolManageRoute.GET("/create/status", controller.GetPoolCreateStatus)
+			poolManageRoute.POST("/delete", controller.DeletePoolInstance)
+			poolManageRoute.POST("/rename", controller.RenamePoolInstance)
+
+			poolManageScopedRoute := poolManageRoute.Group("")
+			poolManageScopedRoute.Use(middleware.SharedPoolScope())
+			{
+				poolManageScopedRoute.POST("/auth-files", controller.AddPoolAuthFile)
+				poolManageScopedRoute.POST("/auth-files/import", controller.ImportPoolAuthFiles)
+				poolManageScopedRoute.POST("/auth-files/clean", controller.CleanPoolAuthFilesNow)
+				poolManageScopedRoute.POST("/auth-files/verify-all", controller.VerifyPoolAuthFilesNow)
+				poolManageScopedRoute.GET("/auth-files/verify-all/progress", controller.GetVerifyPoolProgress)
+				poolManageScopedRoute.POST("/auth-files/usage/reset", controller.ResetPoolAccountQuota)
+				poolManageScopedRoute.PATCH("/auth-files/status", controller.SetPoolAuthFileStatus)
+				poolManageScopedRoute.DELETE("/auth-files", controller.DeletePoolAuthFile)
+				poolManageScopedRoute.POST("/oauth/codex/start", controller.StartPoolCodexOAuth)
+			}
+
+			poolManageRoute.POST("/oauth/codex/callback", controller.SubmitPrivatePoolCodexOAuthCallback)
+			poolManageRoute.GET("/oauth/codex/status", controller.GetPrivatePoolCodexOAuthStatus)
+			poolManageRoute.DELETE("/oauth/codex/session", controller.CancelPrivatePoolCodexOAuth)
 		}
 
 		// User-owned private pool. Every account-management route is bound by

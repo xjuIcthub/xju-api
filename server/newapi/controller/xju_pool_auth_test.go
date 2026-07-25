@@ -256,6 +256,64 @@ func TestSanitizePrivatePoolAuthList(t *testing.T) {
 	assert.NotContains(t, text, "raw-jwt")
 }
 
+func TestWritePoolSuccessDataSanitizesSharedReadOnlyResponse(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set(common.ContextKeyPoolReadOnly, true)
+
+	writePoolSuccessData(c, map[string]any{
+		"name":         "alice.json",
+		"email":        "alice@example.com",
+		"auth_index":   "runtime-secret",
+		"access_token": "credential-secret",
+	})
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "alice@example.com")
+	assert.NotContains(t, w.Body.String(), "runtime-secret")
+	assert.NotContains(t, w.Body.String(), "credential-secret")
+}
+
+func TestReadOnlyPoolUsageRefreshRequiresAccountName(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set(common.ContextKeyPoolReadOnly, true)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/pool/auth-files/usage/refresh?pool=default", strings.NewReader(`{}`))
+
+	RefreshPoolAccountUsage(c)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "one account at a time")
+}
+
+func TestSharedPoolSettingAllowlist(t *testing.T) {
+	assert.True(t, sharedPoolSettingKeys["PoolAutoCleanEnabled"])
+	assert.True(t, sharedPoolSettingKeys["PoolUsageAutoRefreshEnabled"])
+	assert.True(t, sharedPoolSettingKeys["PoolUsageAutoResetEnabled"])
+	assert.False(t, sharedPoolSettingKeys["GitHubClientSecret"])
+	assert.False(t, sharedPoolSettingKeys["PoolAutoCleanHours"])
+}
+
+func TestAdminCannotRenameOrDeletePrivatePoolThroughSharedRoute(t *testing.T) {
+	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(t.TempDir(), "pools.json"))
+	require.NoError(t, common.AddPoolToRegistry(common.PoolEntry{
+		ID: "private-target", MgmtURL: "http://private:8319", MgmtSecret: "secret",
+		OwnerUserID: 42, Kind: common.PoolKindPrivate,
+	}))
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("role", common.RoleAdminUser)
+	assert.False(t, canManagePrivatePoolFromSharedRoute(c, "private-target"))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Set("role", common.RoleRootUser)
+	assert.True(t, canManagePrivatePoolFromSharedRoute(c, "private-target"))
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestFilterPrivatePoolCodexItems(t *testing.T) {
 	accepted, skipped := filterPrivatePoolCodexItems([]poolAuthItem{
 		{name: "codex.json", content: `{"type":"codex","email":"a@example.com"}`},

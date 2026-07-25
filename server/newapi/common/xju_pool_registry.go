@@ -28,6 +28,7 @@ const (
 
 	ContextKeyPrivatePoolID    = "xju_private_pool_id"
 	ContextKeyPrivatePoolScope = "xju_private_pool_scope"
+	ContextKeyPoolReadOnly     = "xju_pool_read_only"
 )
 
 // PoolInfo is the safe metadata the frontend uses to render a pool selector.
@@ -264,6 +265,35 @@ func ListConfiguredPools() []PoolInfo {
 		pools = append(pools, poolInfoFromEntry(e))
 	}
 	return pools
+}
+
+// ListSharedPools returns the system and administrator-created pools that are
+// safe to expose through the shared pool workbench. User-owned private pools
+// stay on their implicit-owner /api/private-pool surface.
+func ListSharedPools() []PoolInfo {
+	configured := ListConfiguredPools()
+	shared := make([]PoolInfo, 0, len(configured))
+	for _, pool := range configured {
+		if pool.Kind != PoolKindPrivate {
+			shared = append(shared, pool)
+		}
+	}
+	return shared
+}
+
+// FindConfiguredPoolInfo resolves safe pool metadata by id. An empty id is the
+// same primary pool as ResolvePoolMgmt's empty/default aliases.
+func FindConfiguredPoolInfo(id string) (PoolInfo, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		id = "default"
+	}
+	for _, pool := range ListConfiguredPools() {
+		if pool.ID == id {
+			return pool, true
+		}
+	}
+	return PoolInfo{}, false
 }
 
 // ListPoolsForActor returns only pools the caller may manage. Root can manage

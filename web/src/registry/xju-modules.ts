@@ -33,8 +33,13 @@ export const XJU_GENERAL_NAV_ITEMS = [
   },
 ]
 
-/** 侧栏 personal 组注入项。私人号池属于当前账号，而非全局控制台。 */
+/** 侧栏 personal 组注入项。共享池检测与私人池都面向当前登录用户。 */
 export const XJU_PERSONAL_NAV_ITEMS = [
+  {
+    titleKey: 'Account Pool',
+    url: '/pool' as const,
+    icon: Boxes,
+  },
   {
     titleKey: 'My Pool',
     url: '/my-pool' as const,
@@ -50,17 +55,10 @@ export const XJU_PERSONAL_NAV_ITEMS = [
 /** 侧栏 admin 组注入项(use-sidebar-data.ts 消费;title 在消费点过 t())。 */
 export const XJU_ADMIN_NAV_ITEMS = [
   {
-    titleKey: 'Account Pool',
-    url: '/pool' as const,
-    icon: Boxes,
-    requiredRole: ROLE.SUPER_ADMIN,
-    placement: 'before-users' as const,
-  },
-  {
     titleKey: 'Default Pool Pricing',
     url: '/default-pricing' as const,
     icon: SlidersHorizontal,
-    requiredRole: ROLE.SUPER_ADMIN,
+    requiredRole: ROLE.ADMIN,
     placement: 'before-users' as const,
   },
   {
@@ -78,8 +76,8 @@ export const XJU_SIDEBAR_MODULE_DEFAULTS: Record<
   Record<string, boolean>
 > = {
   console: { docs: true },
-  personal: { private_pool: true, recharge: true },
-  admin: { pool: true, default_pricing: true, announcements: true },
+  personal: { pool: true, private_pool: true, recharge: true },
+  admin: { default_pricing: true, announcements: true },
 }
 
 /** URL → 配置键映射(merge 进 URL_TO_CONFIG_MAP)。 */
@@ -88,9 +86,9 @@ export const XJU_URL_TO_CONFIG: Record<
   { section: string; module: string }
 > = {
   '/docs': { section: 'console', module: 'docs' },
+  '/pool': { section: 'personal', module: 'pool' },
   '/my-pool': { section: 'personal', module: 'private_pool' },
   '/recharge': { section: 'personal', module: 'recharge' },
-  '/pool': { section: 'admin', module: 'pool' },
   '/default-pricing': { section: 'admin', module: 'default_pricing' },
   '/announcements': {
     section: 'admin',
@@ -111,6 +109,11 @@ export const XJU_SIDEBAR_MODULE_META: Record<
     },
   },
   personal: {
+    pool: {
+      titleKey: 'Account Pool',
+      descriptionKey:
+        'Inspect shared-pool accounts and run availability or quota checks.',
+    },
     private_pool: {
       titleKey: 'My Pool',
       descriptionKey: 'Manage the upstream accounts in your private pool.',
@@ -121,10 +124,6 @@ export const XJU_SIDEBAR_MODULE_META: Record<
     },
   },
   admin: {
-    pool: {
-      titleKey: 'Account Pool',
-      descriptionKey: 'Manage upstream codex accounts in the shared pool.',
-    },
     default_pricing: {
       titleKey: 'Default Pool Pricing',
       descriptionKey: 'Adjust the usage price multiplier for the Default pool.',
