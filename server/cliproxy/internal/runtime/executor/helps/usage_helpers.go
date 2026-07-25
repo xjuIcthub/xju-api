@@ -176,7 +176,7 @@ func (r *UsageReporter) buildAdditionalModelRecord(model string, detail usage.De
 	if model == "" {
 		return usage.Record{}, false
 	}
-	detail = normalizeUsageDetailTotal(detail)
+	detail = normalizeUsageDetailTotal(r.provider, detail)
 	if !hasNonZeroTokenUsage(detail) {
 		return usage.Record{}, false
 	}
@@ -184,7 +184,11 @@ func (r *UsageReporter) buildAdditionalModelRecord(model string, detail usage.De
 }
 
 func (r *UsageReporter) PublishFailure(ctx context.Context, errs ...error) {
-	r.publishWithOutcome(ctx, usage.Detail{}, true, failFromErrors(errs...))
+	r.PublishFailureWithUsage(ctx, usage.Detail{}, errs...)
+}
+
+func (r *UsageReporter) PublishFailureWithUsage(ctx context.Context, detail usage.Detail, errs ...error) {
+	r.publishWithOutcome(ctx, detail, true, failFromErrors(errs...))
 }
 
 func (r *UsageReporter) TrackFailure(ctx context.Context, errPtr *error) {
@@ -200,18 +204,31 @@ func (r *UsageReporter) publishWithOutcome(ctx context.Context, detail usage.Det
 	if r == nil {
 		return
 	}
-	detail = normalizeUsageDetailTotal(detail)
+	detail = normalizeUsageDetailTotal(r.provider, detail)
 	r.once.Do(func() {
 		r.publishRecord(ctx, r.buildRecord(detail, failed, fail))
 	})
 }
 
-func normalizeUsageDetailTotal(detail usage.Detail) usage.Detail {
-	if detail.TotalTokens == 0 {
-		total := detail.InputTokens + detail.OutputTokens + detail.ReasoningTokens
-		if total > 0 {
-			detail.TotalTokens = total
+func normalizeUsageDetailTotal(provider string, detail usage.Detail) usage.Detail {
+	if detail.TotalTokens != 0 {
+		return detail
+	}
+
+	if strings.EqualFold(strings.TrimSpace(provider), "codex") {
+		if detail.InputTokens != 0 || detail.OutputTokens != 0 {
+			detail.TotalTokens = detail.InputTokens + detail.OutputTokens
+			return detail
 		}
+
+		cacheTokens := max(detail.CachedTokens, detail.CacheReadTokens, detail.CacheCreationTokens)
+		detail.TotalTokens = cacheTokens + detail.ReasoningTokens
+		return detail
+	}
+
+	total := detail.InputTokens + detail.OutputTokens + detail.ReasoningTokens
+	if total > 0 {
+		detail.TotalTokens = total
 	}
 	return detail
 }

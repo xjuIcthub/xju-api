@@ -2,9 +2,12 @@ package helps
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -370,6 +373,101 @@ func TestParseInteractionsStreamUsageOfficialMetadata(t *testing.T) {
 	}
 }
 
+func TestUsageDetailTotalCodexDoesNotDoubleCountSubsets(t *testing.T) {
+	detail := normalizeUsageDetailTotal("codex", usage.Detail{
+		InputTokens:         100,
+		OutputTokens:        20,
+		ReasoningTokens:     9,
+		CachedTokens:        30,
+		CacheReadTokens:     30,
+		CacheCreationTokens: 40,
+	})
+	if detail.TotalTokens != 120 {
+		t.Fatalf("total tokens = %d, want 120", detail.TotalTokens)
+	}
+}
+
+func TestUsageDetailTotalCodexUsesSubsetLowerBound(t *testing.T) {
+	detail := normalizeUsageDetailTotal("codex", usage.Detail{
+		ReasoningTokens:     9,
+		CachedTokens:        30,
+		CacheReadTokens:     30,
+		CacheCreationTokens: 40,
+	})
+	if detail.TotalTokens != 49 {
+		t.Fatalf("total tokens = %d, want 49", detail.TotalTokens)
+	}
+}
+
+func TestUsageDetailTotalNonCodexPreservesFallback(t *testing.T) {
+	detail := normalizeUsageDetailTotal("gemini", usage.Detail{
+		InputTokens:     100,
+		OutputTokens:    20,
+		ReasoningTokens: 9,
+		CacheReadTokens: 30,
+	})
+	if detail.TotalTokens != 129 {
+		t.Fatalf("total tokens = %d, want 129", detail.TotalTokens)
+	}
+}
+
+func TestUsageReporterPublishFailureWithUsagePreservesDetail(t *testing.T) {
+	model := fmt.Sprintf("usage-failure-detail-%d", time.Now().UnixNano())
+	records := captureUsageRecords()
+	reporter := NewUsageReporter(context.Background(), "codex", model, nil)
+
+	reporter.PublishFailureWithUsage(context.Background(), usage.Detail{
+		InputTokens:     12,
+		OutputTokens:    3,
+		ReasoningTokens: 2,
+	}, errors.New("upstream interrupted"))
+
+	record := waitForUsageRecord(t, records, "codex", model)
+	if !record.Failed {
+		t.Fatal("record failed = false, want true")
+	}
+	if record.Detail.InputTokens != 12 || record.Detail.OutputTokens != 3 || record.Detail.ReasoningTokens != 2 {
+		t.Fatalf("record detail = %+v, want observed partial usage", record.Detail)
+	}
+	if record.Detail.TotalTokens != 15 {
+		t.Fatalf("record total tokens = %d, want 15", record.Detail.TotalTokens)
+	}
+	if record.Fail.Body != "upstream interrupted" {
+		t.Fatalf("failure body = %q, want upstream interrupted", record.Fail.Body)
+	}
+	assertNoAdditionalUsageRecord(t, records, "codex", model)
+}
+
+func TestUsageReporterPublishEnsureAndFailureCompeteExactlyOnce(t *testing.T) {
+	model := fmt.Sprintf("usage-once-race-%d", time.Now().UnixNano())
+	records := captureUsageRecords()
+	reporter := NewUsageReporter(context.Background(), "codex", model, nil)
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		<-start
+		reporter.Publish(context.Background(), usage.Detail{InputTokens: 4, OutputTokens: 1})
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		reporter.EnsurePublished(context.Background())
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		reporter.PublishFailureWithUsage(context.Background(), usage.Detail{InputTokens: 2}, errors.New("interrupted"))
+	}()
+	close(start)
+	wg.Wait()
+
+	_ = waitForUsageRecord(t, records, "codex", model)
+	assertNoAdditionalUsageRecord(t, records, "codex", model)
+}
+
 func TestUsageReporterBuildRecordIncludesLatency(t *testing.T) {
 	reporter := &UsageReporter{
 		provider:    "openai",
@@ -510,6 +608,58 @@ func TestUsageReporterBuildAdditionalModelRecordSkipsZeroTokens(t *testing.T) {
 	}
 	if _, ok := reporter.buildAdditionalModelRecord("gpt-image-2", usage.Detail{CachedTokens: 2}); !ok {
 		t.Fatalf("expected non-zero cached token usage to be recorded")
+	}
+}
+
+type captureUsagePlugin struct {
+	records chan usage.Record
+}
+
+func (p *captureUsagePlugin) HandleUsage(_ context.Context, record usage.Record) {
+	if p == nil {
+		return
+	}
+	select {
+	case p.records <- record:
+	default:
+	}
+}
+
+func captureUsageRecords() <-chan usage.Record {
+	records := make(chan usage.Record, 64)
+	usage.RegisterNamedPlugin("helps-usage-accounting-capture", &captureUsagePlugin{records: records})
+	return records
+}
+
+func waitForUsageRecord(t *testing.T, records <-chan usage.Record, provider, model string) usage.Record {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for {
+		select {
+		case record := <-records:
+			if record.Provider == provider && record.Model == model {
+				return record
+			}
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for usage record provider=%q model=%q", provider, model)
+		}
+	}
+}
+
+func assertNoAdditionalUsageRecord(t *testing.T, records <-chan usage.Record, provider, model string) {
+	t.Helper()
+	deadline := time.NewTimer(150 * time.Millisecond)
+	defer deadline.Stop()
+	for {
+		select {
+		case record := <-records:
+			if record.Provider == provider && record.Model == model {
+				t.Fatalf("received duplicate usage record: %+v", record)
+			}
+		case <-deadline.C:
+			return
+		}
 	}
 }
 

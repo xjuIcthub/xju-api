@@ -9,6 +9,58 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestConvertCodexResponseToClaudeNonStream_UsageSeparatesCachedInput(t *testing.T) {
+	response := []byte(`{"type":"response.completed","response":{"id":"resp_usage","model":"gpt-5.4","usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":30}},"output":[]}}`)
+
+	out := ConvertCodexResponseToClaudeNonStream(context.Background(), "", []byte(`{"messages":[]}`), nil, response, nil)
+	parsed := gjson.ParseBytes(out)
+	if got := parsed.Get("usage.input_tokens").Int(); got != 70 {
+		t.Fatalf("input_tokens = %d, want 70; output=%s", got, out)
+	}
+	if got := parsed.Get("usage.cache_read_input_tokens").Int(); got != 30 {
+		t.Fatalf("cache_read_input_tokens = %d, want 30; output=%s", got, out)
+	}
+	if got := parsed.Get("usage.output_tokens").Int(); got != 20 {
+		t.Fatalf("output_tokens = %d, want 20; output=%s", got, out)
+	}
+}
+
+func TestConvertCodexResponseToClaude_StreamCompletedUsageSeparatesCachedInput(t *testing.T) {
+	var param any
+	outputs := ConvertCodexResponseToClaude(context.Background(), "", []byte(`{"messages":[]}`), nil, []byte(`data: {"type":"response.completed","response":{"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":30}}}}`), &param)
+	messageDelta, ok := findClaudeStreamMessageDelta(outputs)
+	if !ok {
+		t.Fatalf("missing message_delta; outputs=%q", outputs)
+	}
+	if got := messageDelta.Get("usage.input_tokens").Int(); got != 70 {
+		t.Fatalf("input_tokens = %d, want 70; event=%s", got, messageDelta.Raw)
+	}
+	if got := messageDelta.Get("usage.cache_read_input_tokens").Int(); got != 30 {
+		t.Fatalf("cache_read_input_tokens = %d, want 30; event=%s", got, messageDelta.Raw)
+	}
+	if got := messageDelta.Get("usage.output_tokens").Int(); got != 20 {
+		t.Fatalf("output_tokens = %d, want 20; event=%s", got, messageDelta.Raw)
+	}
+}
+
+func TestConvertCodexResponseToClaude_StreamCompletedWithoutUsageUsesZero(t *testing.T) {
+	var param any
+	outputs := ConvertCodexResponseToClaude(context.Background(), "", []byte(`{"messages":[]}`), nil, []byte(`data: {"type":"response.completed","response":{}}`), &param)
+	messageDelta, ok := findClaudeStreamMessageDelta(outputs)
+	if !ok {
+		t.Fatalf("missing message_delta; outputs=%q", outputs)
+	}
+	if got := messageDelta.Get("usage.input_tokens").Int(); got != 0 {
+		t.Fatalf("input_tokens = %d, want 0; event=%s", got, messageDelta.Raw)
+	}
+	if got := messageDelta.Get("usage.output_tokens").Int(); got != 0 {
+		t.Fatalf("output_tokens = %d, want 0; event=%s", got, messageDelta.Raw)
+	}
+	if messageDelta.Get("usage.cache_read_input_tokens").Exists() {
+		t.Fatalf("cache_read_input_tokens should be absent without usage; event=%s", messageDelta.Raw)
+	}
+}
+
 func TestConvertCodexResponseToClaude_StreamThinkingIncludesSignature(t *testing.T) {
 	ctx := context.Background()
 	originalRequest := []byte(`{"messages":[]}`)
