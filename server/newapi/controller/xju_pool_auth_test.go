@@ -184,6 +184,34 @@ func TestParsePoolAuthAccounts(t *testing.T) {
 		// Each item carries only the inner credential, not the account wrapper.
 		assert.Contains(t, items[0].content, "access_token")
 	})
+	t.Run("exporter bundle with platform tags each account as codex", func(t *testing.T) {
+		// go-pool / sub2 exports carry {platform,type:"oauth",credentials} per
+		// account. The type marker lives on the wrapper, so the written file must
+		// still gain a top-level "type":"codex" or CLIProxyAPI drops it silently.
+		blob := `{"accounts":[
+			{"name":"Meg","platform":"openai","type":"oauth","priority":1,"credentials":{
+				"email":"meg@x.com","access_token":"a","refresh_token":"r","chatgpt_account_id":"acc-9"
+			}},
+			{"name":"Sol","platform":"codex","type":"oauth","credentials":{
+				"email":"sol@x.com","id_token":"i","chatgpt_account_id":"acc-7"
+			}}
+		]}`
+		items := parsePoolAuthAccounts(blob, "")
+		require.Len(t, items, 2)
+		assert.ElementsMatch(t,
+			[]string{"codex-meg-x-com.json", "codex-sol-x-com.json"},
+			[]string{items[0].name, items[1].name})
+		for _, it := range items {
+			var cred map[string]any
+			require.NoError(t, json.Unmarshal([]byte(it.content), &cred))
+			assert.Equal(t, "codex", cred["type"], "each account must be tagged codex")
+			assert.NotContains(t, cred, "credentials")
+			assert.NotEmpty(t, cred["account_id"], "account_id mapped from chatgpt_account_id")
+		}
+		accepted, skipped := filterPrivatePoolCodexItems(items)
+		require.Len(t, accepted, 2)
+		assert.Empty(t, skipped)
+	})
 	t.Run("json array of bare objects expands", func(t *testing.T) {
 		blob := `[{"email":"x@y.com","access_token":"t"},{"email":"z@y.com","access_token":"t2"}]`
 		items := parsePoolAuthAccounts(blob, "")

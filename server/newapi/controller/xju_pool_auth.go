@@ -419,9 +419,18 @@ func expandPoolAuthAccounts(list []any) []poolAuthItem {
 		if !ok {
 			continue
 		}
-		cred := obj
 		accountName := stringField(obj, "name")
-		if inner, ok := obj["credentials"].(map[string]any); ok {
+		cred := obj
+		if normalized, ok := singleWrappedCodexCredential(obj); ok {
+			// Exporters (go-pool / sub2) wrap each account as
+			// {platform:"openai",type:"oauth",credentials:{...}}, carrying the
+			// provider marker on the wrapper rather than inside credentials.
+			// Normalize so the written file gets the top-level "type":"codex"
+			// (and account_id) that CLIProxyAPI requires; without it the account
+			// is silently dropped at load time and every model 502s with
+			// "unknown provider".
+			cred = normalized
+		} else if inner, ok := obj["credentials"].(map[string]any); ok {
 			cred = inner
 		}
 		raw, err := common.Marshal(cred)
