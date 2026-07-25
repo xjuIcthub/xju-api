@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -43,6 +44,7 @@ const (
 
 var (
 	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
+	ErrOnlinePaymentDisabled = errors.New("online payment disabled")
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
 )
@@ -107,6 +109,9 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 }
 
 func Recharge(referenceId string, customerId string, callerIp string) (err error) {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		return ErrOnlinePaymentDisabled
+	}
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -318,6 +323,9 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 
 // ManualCompleteTopUp 管理员手动完成订单并给用户充值
 func ManualCompleteTopUp(tradeNo string, callerIp string) error {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		return ErrOnlinePaymentDisabled
+	}
 	if tradeNo == "" {
 		return errors.New("未提供订单号")
 	}
@@ -390,6 +398,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	return nil
 }
 func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string) (err error) {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		return ErrOnlinePaymentDisabled
+	}
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -465,6 +476,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 }
 
 func RechargeWaffo(tradeNo string, callerIp string) (err error) {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		return ErrOnlinePaymentDisabled
+	}
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -528,6 +542,9 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 }
 
 func RechargeWaffoPancake(tradeNo string) (err error) {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		return ErrOnlinePaymentDisabled
+	}
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")
 	}

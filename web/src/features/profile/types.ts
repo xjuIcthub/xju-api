@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { PremiumTier } from '@/lib/premium'
+
 // ============================================================================
 // Profile Type Definitions
 // ============================================================================
@@ -49,6 +51,8 @@ export interface UserProfile {
   quota: number
   /** Total used quota */
   used_quota: number
+  /** Visual identity derived from the current Default-pool balance */
+  premium_tier?: PremiumTier
   /** Total request count */
   request_count: number
   /** Account status (1=启用, 2=禁用, 3=待审核, 4=已删除) */
@@ -221,6 +225,8 @@ export interface CheckinStats {
 export interface CheckinStatusResponse {
   /** Whether check-in feature is enabled */
   enabled: boolean
+  /** Fixed daily reward in quota units ($0.10 equivalent) */
+  reward_quota: number
   /** Check-in statistics */
   stats: CheckinStats
 }

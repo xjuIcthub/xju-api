@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type wechatLoginResponse struct {
@@ -51,6 +54,33 @@ func getWeChatIdByCode(code string) (string, error) {
 		return "", errors.New("验证码错误或已过期")
 	}
 	return res.Data, nil
+}
+
+func createWeChatRegistration(wechatId string, affCode string) (*model.User, error) {
+	user := &model.User{
+		Username:    "wechat_" + strconv.Itoa(model.GetMaxUserId()+1),
+		DisplayName: "WeChat User",
+		WeChatId:    wechatId,
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusEnabled,
+	}
+	var registrationInvite service.RegistrationInvite
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var resolveErr error
+		registrationInvite, resolveErr = service.ResolveRegistrationInviteWithTx(tx, affCode)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if err := user.InsertWithTx(tx, registrationInvite.InviterID); err != nil {
+			return err
+		}
+		return service.ConsumeRegistrationInviteWithTx(tx, registrationInvite, user.Id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	user.FinishInsert(registrationInvite.InviterID)
+	return user, nil
 }
 
 func WeChatAuth(c *gin.Context) {
@@ -91,18 +121,19 @@ func WeChatAuth(c *gin.Context) {
 		}
 	} else {
 		if common.RegisterEnabled {
-			user.Username = "wechat_" + strconv.Itoa(model.GetMaxUserId()+1)
-			user.DisplayName = "WeChat User"
-			user.Role = common.RoleCommonUser
-			user.Status = common.UserStatusEnabled
-
-			if err := user.Insert(0); err != nil {
+			createdUser, err := createWeChatRegistration(wechatId, c.Query("aff"))
+			if err != nil {
+				if errors.Is(err, service.ErrRegistrationInviteInvalid) {
+					common.ApiErrorI18n(c, i18n.MsgUserInviteCodeRequired)
+					return
+				}
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
 					"message": err.Error(),
 				})
 				return
 			}
+			user = *createdUser
 		} else {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

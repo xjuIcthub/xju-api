@@ -52,12 +52,14 @@ interface CheckinCalendarCardProps {
   checkinEnabled: boolean
   turnstileEnabled: boolean
   turnstileSiteKey: string
+  onCheckinSuccess?: () => void | Promise<void>
 }
 
 export function CheckinCalendarCard({
   checkinEnabled,
   turnstileEnabled,
   turnstileSiteKey,
+  onCheckinSuccess,
 }: CheckinCalendarCardProps) {
   const { t } = useTranslation()
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -147,7 +149,8 @@ export function CheckinCalendarCard({
           toast.success(
             `${t('Check-in successful! Received')} ${formatQuotaWithCurrency(res.data.quota_awarded)}`
           )
-          refetch()
+          await refetch()
+          await onCheckinSuccess?.()
           setTurnstileModalVisible(false)
         } else {
           if (!token && shouldTriggerTurnstile(res.message)) {
@@ -169,7 +172,7 @@ export function CheckinCalendarCard({
         setCheckinLoading(false)
       }
     },
-    [refetch, shouldTriggerTurnstile, t, turnstileSiteKey]
+    [onCheckinSuccess, refetch, shouldTriggerTurnstile, t, turnstileSiteKey]
   )
 
   const handlePrevMonth = () => {
@@ -318,7 +321,11 @@ export function CheckinCalendarCard({
                 <p className='text-muted-foreground mt-1 line-clamp-2 text-xs sm:text-sm'>
                   {checkedToday && todayAward !== undefined
                     ? `${t('Today')} +${formatQuotaWithCurrency(todayAward)}`
-                    : t('Check in daily to receive random quota rewards')}
+                    : t('Check in daily to receive {{amount}}', {
+                        amount: formatQuotaWithCurrency(
+                          checkinData?.reward_quota ?? 0
+                        ),
+                      })}
                 </p>
               </div>
             </button>
@@ -469,7 +476,11 @@ export function CheckinCalendarCard({
                 <div className='bg-muted/30 text-muted-foreground rounded-lg border p-3 text-xs'>
                   <ul className='list-disc space-y-1 pl-5'>
                     <li>
-                      {t('Check in daily to receive random quota rewards')}
+                      {t('Each daily check-in rewards {{amount}}', {
+                        amount: formatQuotaWithCurrency(
+                          checkinData?.reward_quota ?? 0
+                        ),
+                      })}
                     </li>
                     <li>
                       {t('Rewards will be added directly to your balance')}

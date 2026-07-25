@@ -72,17 +72,21 @@
 **`deploy/build-newapi.sh`** 是唯一构建入口,走 `deploy/Dockerfile.newapi.prebuilt`:
 
 ```bash
-./deploy/build-newapi.sh v0.6.0        # 本机: bun build → 拷 dist → docker build(Go-only)
-SKIP_WEB=1 ./deploy/build-newapi.sh    # tri: 用 scp 来的 server/newapi/prebuilt/dist,只编 Go
+./deploy/build-newapi.sh v0.6.0        # 本机:bun build → prebuilt/current → docker build
+./scripts/package-web-dist.sh /private/tmp/xju-web-artifacts
+SKIP_WEB=1 ./deploy/build-newapi.sh    # tri:校验已安装的 prebuilt/current,只编 Go
 ```
 
 - 前端产物必须在本机(claude-vps)`bun run build`;tri 内存极紧,跑 rspack 会 OOM。
+- 标准传递方式是本机 `package-web-dist.sh` 生成带 commit、文件树哈希与 SHA-256 的归档,
+  tri 用 `deploy/install-web-dist.sh` 安全解包、加锁并带 journal 切换;不能手工裸拷一个
+  无法溯源的 `dist/`。
 - Go 二进制用 `go:embed web/dist` **编译期内嵌**前端(`server/newapi/main.go`),
   所以定制前端必须自建镜像,不能只挂载静态文件。
 - 历史耗时参考(全量 Dockerfile + BuildKit 缓存挂载时代,已删除):只改一行后端
   `go build` 从 ~40-60s 降到 ~7s;只改前端 rspack ~60-90s;整体热构建十几秒。
 
-镜像送 claude-tri(二选一):
+也可以完全在本机构建镜像后送 claude-tri(二选一):
 
 ```bash
 docker push winbeau/xju-newapi:<tag>       # 走 registry

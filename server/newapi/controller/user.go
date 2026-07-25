@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
@@ -159,6 +158,7 @@ func setupLogin(user *model.User, c *gin.Context) {
 			"role":         user.Role,
 			"status":       user.Status,
 			"group":        user.Group,
+			"premium_tier": model.PremiumTierForQuota(user.Quota),
 		},
 	})
 }
@@ -237,34 +237,66 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
-	// The submitted code doubles as a referral aff_code (for inviter tracking)
-	// and, when invite-only registration is on, as the single-use invite code
-	// that must be consumed to register.
 	affCode := user.AffCode
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
-
-	// xju-api:edit — Register 收口(REFACTOR-PLAN §5.2):邀请码的消费/回滚/
-	// 归属协议整体收敛进 service.ConsumeInviteCodeForRegistration,这里只留
-	// 调用 + defer;任何失败返回路径由 defer 回滚,成功路径 commit 后 release
-	// 自动失效。
-	inviteRelease, inviteCommit, err := service.ConsumeInviteCodeForRegistration(affCode)
-	if err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserInviteCodeRequired)
-		return
-	}
-	defer inviteRelease()
-
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.Username,
-		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+
+	defaultTokenKey := ""
+	if constant.GenerateDefaultToken {
+		defaultTokenKey, err = common.GenerateKey()
+		if err != nil {
+			common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
+			common.SysLog("failed to generate token key: " + err.Error())
+			return
+		}
+	}
+
+	var registrationInvite service.RegistrationInvite
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		var resolveErr error
+		registrationInvite, resolveErr = service.ResolveRegistrationInviteWithTx(tx, affCode)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if err := cleanUser.InsertWithTx(tx, registrationInvite.InviterID); err != nil {
+			return err
+		}
+		if err := service.ConsumeRegistrationInviteWithTx(tx, registrationInvite, cleanUser.Id); err != nil {
+			return err
+		}
+		if constant.GenerateDefaultToken {
+			token := model.Token{
+				UserId:             cleanUser.Id,
+				Name:               cleanUser.Username + "的初始令牌",
+				Key:                defaultTokenKey,
+				CreatedTime:        common.GetTimestamp(),
+				AccessedTime:       common.GetTimestamp(),
+				ExpiredTime:        -1,
+				RemainQuota:        500000,
+				UnlimitedQuota:     true,
+				ModelLimitsEnabled: false,
+			}
+			if setting.DefaultUseAutoGroup {
+				token.Group = "auto"
+			}
+			if err := token.InsertWithTx(tx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrRegistrationInviteInvalid) {
+			common.ApiErrorI18n(c, i18n.MsgUserInviteCodeRequired)
+			return
+		}
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
 			return
@@ -272,42 +304,7 @@ func Register(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 获取插入后的用户ID
-	var insertedUser model.User
-	if err := model.DB.Where("username = ?", cleanUser.Username).First(&insertedUser).Error; err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
-		return
-	}
-	inviteCommit(insertedUser.Id)
-	// 生成默认令牌
-	if constant.GenerateDefaultToken {
-		key, err := common.GenerateKey()
-		if err != nil {
-			common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
-			common.SysLog("failed to generate token key: " + err.Error())
-			return
-		}
-		// 生成默认令牌
-		token := model.Token{
-			UserId:             insertedUser.Id, // 使用插入后的用户ID
-			Name:               cleanUser.Username + "的初始令牌",
-			Key:                key,
-			CreatedTime:        common.GetTimestamp(),
-			AccessedTime:       common.GetTimestamp(),
-			ExpiredTime:        -1,     // 永不过期
-			RemainQuota:        500000, // 示例额度
-			UnlimitedQuota:     true,
-			ModelLimitsEnabled: false,
-		}
-		if setting.DefaultUseAutoGroup {
-			token.Group = "auto"
-		}
-		if err := token.Insert(); err != nil {
-			common.ApiErrorI18n(c, i18n.MsgCreateDefaultTokenErr)
-			return
-		}
-	}
+	cleanUser.FinishInsert(registrationInvite.InviterID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -357,6 +354,15 @@ func SearchUsers(c *gin.Context) {
 	pageInfo.SetItems(users)
 	common.ApiSuccess(c, pageInfo)
 	return
+}
+
+func GetUsersSummary(c *gin.Context) {
+	summary, err := model.GetUserUsageSummary()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, summary)
 }
 
 func canManageTargetRole(myRole int, targetRole int) bool {
@@ -510,6 +516,7 @@ func GetSelf(c *gin.Context) {
 		"group":             user.Group,
 		"quota":             user.Quota,
 		"used_quota":        user.UsedQuota,
+		"premium_tier":      user.PremiumTier,
 		"request_count":     user.RequestCount,
 		"aff_code":          user.AffCode,
 		"aff_count":         user.AffCount,
@@ -1307,11 +1314,6 @@ func getTopUpLock(userID int) *topUpTryLock {
 }
 
 func TopUp(c *gin.Context) {
-	if !operation_setting.IsPaymentComplianceConfirmed() {
-		common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
-		return
-	}
-
 	id := c.GetInt("id")
 	lock := getTopUpLock(id)
 	if !lock.TryLock() {

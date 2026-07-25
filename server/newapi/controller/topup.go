@@ -23,10 +23,12 @@ import (
 
 func GetTopUpInfo(c *gin.Context) {
 	complianceConfirmed := operation_setting.IsPaymentComplianceConfirmed()
+	onlinePaymentEnabled := operation_setting.IsOnlinePaymentEnabled()
+	onlinePaymentAvailable := onlinePaymentEnabled && complianceConfirmed
 
 	// 获取支付方式
 	payMethods := operation_setting.PayMethods
-	if !complianceConfirmed {
+	if !onlinePaymentAvailable {
 		payMethods = []map[string]string{}
 	}
 
@@ -101,7 +103,8 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_creem_topup":               isCreemTopUpEnabled(),
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
-		"enable_redemption":                complianceConfirmed,
+		"enable_redemption":                true,
+		"online_payment_enabled":           onlinePaymentEnabled,
 		"payment_compliance_confirmed":     complianceConfirmed,
 		"payment_compliance_terms_version": operation_setting.CurrentComplianceTermsVersion,
 		"waffo_pay_methods": func() interface{} {
@@ -110,7 +113,12 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"creem_products":          setting.CreemProducts,
+		"creem_products": func() string {
+			if onlinePaymentAvailable {
+				return setting.CreemProducts
+			}
+			return ""
+		}(),
 		"pay_methods":             payMethods,
 		"min_topup":               operation_setting.MinTopUp,
 		"stripe_min_topup":        setting.StripeMinTopUp,
@@ -118,7 +126,12 @@ func GetTopUpInfo(c *gin.Context) {
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
-		"topup_link":              common.TopUpLink,
+		"topup_link": func() string {
+			if onlinePaymentAvailable {
+				return common.TopUpLink
+			}
+			return ""
+		}(),
 	}
 	common.ApiSuccess(c, data)
 }
@@ -187,6 +200,11 @@ func getMinTopup() int64 {
 }
 
 func RequestEpay(c *gin.Context) {
+	if !isEpayTopUpEnabled() {
+		common.ApiErrorMsg(c, "在线支付功能暂未开放")
+		return
+	}
+
 	var req EpayRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
@@ -412,6 +430,11 @@ func EpayNotify(c *gin.Context) {
 }
 
 func RequestAmount(c *gin.Context) {
+	if !isEpayTopUpEnabled() {
+		common.ApiErrorMsg(c, "在线支付功能暂未开放")
+		return
+	}
+
 	var req AmountRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
@@ -493,6 +516,10 @@ type AdminCompleteTopupRequest struct {
 
 // AdminCompleteTopUp 管理员补单接口
 func AdminCompleteTopUp(c *gin.Context) {
+	if !requireOnlinePaymentEnabled(c) {
+		return
+	}
+
 	var req AdminCompleteTopupRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.TradeNo == "" {
 		common.ApiErrorMsg(c, "参数错误")

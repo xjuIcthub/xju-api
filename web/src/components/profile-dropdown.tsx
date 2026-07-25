@@ -21,6 +21,7 @@ import { User, LogOut, Settings } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PremiumUsername } from '@/components/premium-username'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -79,9 +80,11 @@ export function ProfileDropdown() {
               </AvatarFallback>
             </Avatar>
             <div className='flex flex-1 flex-col gap-0.5 overflow-hidden'>
-              <p className='text-foreground truncate text-sm font-medium'>
-                {displayName}
-              </p>
+              <PremiumUsername
+                name={displayName}
+                tier={user?.premium_tier}
+                className='w-fit max-w-full text-sm font-medium'
+              />
               <div className='flex items-center gap-1.5'>
                 <span className='text-muted-foreground text-xs'>
                   {roleLabel}

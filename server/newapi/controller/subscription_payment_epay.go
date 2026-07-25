@@ -22,6 +22,9 @@ type SubscriptionEpayPayRequest struct {
 }
 
 func SubscriptionRequestEpay(c *gin.Context) {
+	if !requireOnlinePaymentEnabled(c) {
+		return
+	}
 	if !requirePaymentCompliance(c) {
 		return
 	}
@@ -116,6 +119,11 @@ func SubscriptionRequestEpay(c *gin.Context) {
 }
 
 func SubscriptionEpayNotify(c *gin.Context) {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
+	}
+
 	var params map[string]string
 
 	if c.Request.Method == "POST" {
@@ -171,6 +179,11 @@ func SubscriptionEpayNotify(c *gin.Context) {
 // SubscriptionEpayReturn handles browser return after payment.
 // It verifies the payload and completes the order, then redirects to console.
 func SubscriptionEpayReturn(c *gin.Context) {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		c.Redirect(http.StatusFound, paymentReturnPath("/console/topup?pay=fail"))
+		return
+	}
+
 	var params map[string]string
 
 	if c.Request.Method == "POST" {

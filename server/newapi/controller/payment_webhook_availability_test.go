@@ -1,10 +1,15 @@
 package controller
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,12 +18,128 @@ func confirmPaymentComplianceForTest(t *testing.T) {
 	paymentSetting := operation_setting.GetPaymentSetting()
 	originalConfirmed := paymentSetting.ComplianceConfirmed
 	originalTermsVersion := paymentSetting.ComplianceTermsVersion
+	originalOnlinePaymentEnabled := paymentSetting.OnlinePaymentEnabled
+	t.Cleanup(func() {
+		paymentSetting.ComplianceConfirmed = originalConfirmed
+		paymentSetting.ComplianceTermsVersion = originalTermsVersion
+		paymentSetting.OnlinePaymentEnabled = originalOnlinePaymentEnabled
+	})
+	paymentSetting.ComplianceConfirmed = true
+	paymentSetting.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	paymentSetting.OnlinePaymentEnabled = true
+}
+
+func disableOnlinePaymentForTest(t *testing.T) {
+	t.Helper()
+	paymentSetting := operation_setting.GetPaymentSetting()
+	originalOnlinePaymentEnabled := paymentSetting.OnlinePaymentEnabled
+	t.Cleanup(func() {
+		paymentSetting.OnlinePaymentEnabled = originalOnlinePaymentEnabled
+	})
+	paymentSetting.OnlinePaymentEnabled = false
+}
+
+func TestOnlinePaymentMasterSwitchOverridesConfiguredGateway(t *testing.T) {
+	confirmPaymentComplianceForTest(t)
+	disableOnlinePaymentForTest(t)
+	originalAPISecret := setting.StripeApiSecret
+	originalWebhookSecret := setting.StripeWebhookSecret
+	originalPriceID := setting.StripePriceId
+	t.Cleanup(func() {
+		setting.StripeApiSecret = originalAPISecret
+		setting.StripeWebhookSecret = originalWebhookSecret
+		setting.StripePriceId = originalPriceID
+	})
+
+	setting.StripeApiSecret = "sk_test_123"
+	setting.StripeWebhookSecret = "whsec_test"
+	setting.StripePriceId = "price_123"
+	require.False(t, isStripeTopUpEnabled())
+	require.False(t, isStripeWebhookEnabled())
+}
+
+func TestDirectOnlinePaymentHandlersRejectWhenMasterSwitchIsOff(t *testing.T) {
+	confirmPaymentComplianceForTest(t)
+	disableOnlinePaymentForTest(t)
+	gin.SetMode(gin.TestMode)
+
+	testCases := []struct {
+		name    string
+		handler gin.HandlerFunc
+		body    string
+	}{
+		{name: "epay amount", handler: RequestAmount, body: `{"amount":10}`},
+		{name: "epay order", handler: RequestEpay, body: `{"amount":10,"payment_method":"alipay"}`},
+		{name: "stripe amount", handler: RequestStripeAmount, body: `{"amount":10}`},
+		{name: "stripe order", handler: RequestStripePay, body: `{"amount":10,"payment_method":"stripe"}`},
+		{name: "creem order", handler: RequestCreemPay, body: `{"product_id":"prod_123","payment_method":"creem"}`},
+		{name: "waffo amount", handler: RequestWaffoAmount, body: `{"amount":10}`},
+		{name: "waffo order", handler: RequestWaffoPay, body: `{"amount":10}`},
+		{name: "waffo pancake amount", handler: RequestWaffoPancakeAmount, body: `{"amount":10}`},
+		{name: "waffo pancake order", handler: RequestWaffoPancakePay, body: `{"amount":10}`},
+		{name: "subscription epay", handler: SubscriptionRequestEpay, body: `{"plan_id":1,"payment_method":"alipay"}`},
+		{name: "subscription stripe", handler: SubscriptionRequestStripePay, body: `{"plan_id":1}`},
+		{name: "subscription creem", handler: SubscriptionRequestCreemPay, body: `{"plan_id":1}`},
+		{name: "subscription waffo pancake", handler: SubscriptionRequestWaffoPancakePay, body: `{"plan_id":1}`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(tc.body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Set("id", 1)
+
+			tc.handler(c)
+
+			var response struct {
+				Success bool   `json:"success"`
+				Message string `json:"message"`
+			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+			require.False(t, response.Success)
+			require.Equal(t, "在线支付功能暂未开放", response.Message)
+		})
+	}
+}
+
+func TestTopUpInfoKeepsRedemptionAvailableWhenOnlinePaymentIsOff(t *testing.T) {
+	disableOnlinePaymentForTest(t)
+	paymentSetting := operation_setting.GetPaymentSetting()
+	originalConfirmed := paymentSetting.ComplianceConfirmed
+	originalTermsVersion := paymentSetting.ComplianceTermsVersion
 	t.Cleanup(func() {
 		paymentSetting.ComplianceConfirmed = originalConfirmed
 		paymentSetting.ComplianceTermsVersion = originalTermsVersion
 	})
-	paymentSetting.ComplianceConfirmed = true
-	paymentSetting.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	paymentSetting.ComplianceConfirmed = false
+	paymentSetting.ComplianceTermsVersion = ""
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/user/topup/info", nil)
+	GetTopUpInfo(c)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			EnableRedemption     bool                `json:"enable_redemption"`
+			OnlinePaymentEnabled bool                `json:"online_payment_enabled"`
+			EnableOnlineTopUp    bool                `json:"enable_online_topup"`
+			PayMethods           []map[string]string `json:"pay_methods"`
+			TopUpLink            string              `json:"topup_link"`
+			CreemProducts        string              `json:"creem_products"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.True(t, response.Data.EnableRedemption)
+	require.False(t, response.Data.OnlinePaymentEnabled)
+	require.False(t, response.Data.EnableOnlineTopUp)
+	require.Empty(t, response.Data.PayMethods)
+	require.Empty(t, response.Data.TopUpLink)
+	require.Empty(t, response.Data.CreemProducts)
 }
 
 func TestStripeWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {

@@ -44,6 +44,9 @@ export const userSchema = z.object({
   email: z.string().optional(),
   quota: z.number(),
   used_quota: z.number(),
+  premium_tier: z
+    .enum(['none', 'gold_name', 'silver_crown', 'gold_crown'])
+    .optional(),
   request_count: z.number(),
   group: z.string(),
   aff_code: z.string().optional(),

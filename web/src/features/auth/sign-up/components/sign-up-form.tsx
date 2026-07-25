@@ -98,6 +98,8 @@ export function SignUpForm({
   })
 
   const emailValue = form.watch('email')
+  const affCodeValue = form.watch('aff_code')
+  const resolvedAffCode = affCodeValue?.trim() || getAffiliateCode()
   const emailVerificationRequired = !!status?.email_verification
   // xju-api:edit — invite-only registration: the backend rejects an absent/unknown
   // code, so surface it as a required field instead of a silent 400.
@@ -111,6 +113,16 @@ export function SignUpForm({
     true
   const hasWeChatLogin = Boolean(status?.wechat_login)
   const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
+
+  const renderVerificationButtonContent = () => {
+    if (isActive) {
+      return t('Resend ({{seconds}}s)', { seconds: secondsLeft })
+    }
+    if (isSendingCode) {
+      return <Loader2 className='h-4 w-4 animate-spin' />
+    }
+    return t('Send code')
+  }
 
   const wechatQrCodeUrl = useMemo(() => {
     return (
@@ -186,7 +198,7 @@ export function SignUpForm({
       } else {
         toast.error(res?.message || t('Failed to create account'))
       }
-    } catch (_error) {
+    } catch {
       // Errors are handled by global interceptor
     } finally {
       setIsLoading(false)
@@ -200,6 +212,12 @@ export function SignUpForm({
   const handleOpenWeChatDialog = () => {
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
+      return
+    }
+    if (inviteCodeRequired && !resolvedAffCode) {
+      form.setError('aff_code', {
+        message: t('Registration is invite-only. Please enter an invite code'),
+      })
       return
     }
 
@@ -222,7 +240,7 @@ export function SignUpForm({
 
     setIsWeChatSubmitting(true)
     try {
-      const res = await wechatLoginByCode(wechatCode)
+      const res = await wechatLoginByCode(wechatCode, resolvedAffCode)
       if (res?.success) {
         await handleLoginSuccess(res.data as { id?: number } | null)
         toast.success(t('Signed in via WeChat'))
@@ -230,7 +248,7 @@ export function SignUpForm({
       } else {
         toast.error(res?.message || t('Login failed'))
       }
-    } catch (_error) {
+    } catch {
       toast.error(t('Login failed'))
     } finally {
       setIsWeChatSubmitting(false)
@@ -359,13 +377,7 @@ export function SignUpForm({
                 }
                 onClick={handleSendVerificationCode}
               >
-                {isActive ? (
-                  t('Resend ({{seconds}}s)', { seconds: secondsLeft })
-                ) : isSendingCode ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  t('Send code')
-                )}
+                {renderVerificationButtonContent()}
               </Button>
             </div>
           </>
@@ -405,7 +417,12 @@ export function SignUpForm({
         {oauthRegisterEnabled && (
           <OAuthProviders
             status={status}
-            disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+            affCode={resolvedAffCode}
+            disabled={
+              isLoading ||
+              (requiresLegalConsent && !agreedToLegal) ||
+              (inviteCodeRequired && !resolvedAffCode)
+            }
             onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
             isWeChatLoading={isWeChatSubmitting}
             className='pt-2'

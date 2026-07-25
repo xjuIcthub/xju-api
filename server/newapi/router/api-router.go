@@ -128,6 +128,7 @@ func SetApiRouter(router *gin.Engine) {
 			adminRoute.Use(middleware.AdminAuth())
 			{
 				adminRoute.GET("/", controller.GetAllUsers)
+				adminRoute.GET("/summary", controller.GetUsersSummary)
 				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
 				adminRoute.GET("/search", controller.SearchUsers)
@@ -207,6 +208,8 @@ func SetApiRouter(router *gin.Engine) {
 		poolRoute.Use(middleware.RootAuth())
 		{
 			poolRoute.GET("/pools", controller.ListPools)
+			poolRoute.GET("/default-pricing", controller.GetDefaultPoolPricing)
+			poolRoute.PUT("/default-pricing", controller.UpdateDefaultPoolPricing)
 			poolRoute.POST("/create", controller.CreatePoolInstance)
 			poolRoute.GET("/create/status", controller.GetPoolCreateStatus)
 			poolRoute.POST("/delete", controller.DeletePoolInstance)

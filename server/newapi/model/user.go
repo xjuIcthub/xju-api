@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
@@ -53,6 +52,7 @@ type User struct {
 	CreatedAt        int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 	LastLoginAt      int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
 	AdminPermissions map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
+	PremiumTier      PremiumTier                `json:"premium_tier" gorm:"-:all"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -316,6 +316,9 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	for _, user := range users {
+		user.populateComputedFields()
+	}
 
 	return users, total, nil
 }
@@ -384,6 +387,9 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	for _, user := range users {
+		user.populateComputedFields()
+	}
 
 	return users, total, nil
 }
@@ -399,7 +405,20 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	} else {
 		err = DB.Omit("password", "access_token").First(&user, "id = ?", id).Error
 	}
+	user.populateComputedFields()
 	return &user, err
+}
+
+type UserUsageSummary struct {
+	TotalUsedQuota int64 `json:"total_used_quota"`
+}
+
+func GetUserUsageSummary() (UserUsageSummary, error) {
+	summary := UserUsageSummary{}
+	err := DB.Unscoped().Model(&User{}).
+		Select("COALESCE(SUM(used_quota), 0) AS total_used_quota").
+		Scan(&summary).Error
+	return summary, err
 }
 
 func GetUserIdByAffCode(affCode string) (int, error) {
@@ -429,17 +448,6 @@ func HardDeleteUserById(id int) error {
 		}
 		return tx.Unscoped().Delete(&User{}, "id = ?", id).Error
 	})
-}
-
-func inviteUser(inviterId int) (err error) {
-	user, err := GetUserById(inviterId, true)
-	if err != nil {
-		return err
-	}
-	user.AffCount++
-	user.AffQuota += common.QuotaForInviter
-	user.AffHistoryQuota += common.QuotaForInviter
-	return DB.Save(user).Error
 }
 
 func (user *User) TransferAffQuotaToQuota(quota int) error {
@@ -532,22 +540,7 @@ func ensureEmailAvailableWithTx(tx *gorm.DB, email string, excludeUserID int) er
 
 func (user *User) Insert(inviterId int) error {
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		return withNormalizedEmailLock(tx, user.Email, func(tx *gorm.DB) error {
-			if err := user.prepareForInsert(tx); err != nil {
-				return err
-			}
-			user.Quota = common.QuotaForNewUser
-			user.AffCode = common.GetRandomString(4)
-
-			// 初始化用户设置，包括默认的边栏配置
-			if user.Setting == "" {
-				defaultSetting := dto.UserSetting{}
-				// 这里暂时不设置SidebarModules，因为需要在用户创建后根据角色设置
-				user.SetSetting(defaultSetting)
-			}
-
-			return tx.Create(user).Error
-		})
+		return user.InsertWithTx(tx, inviterId)
 	}); err != nil {
 		return err
 	}
@@ -575,17 +568,7 @@ func (user *User) finishInsert(inviterId int) {
 	if common.QuotaForNewUser > 0 {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
-	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
-		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-		}
-		if common.QuotaForInviter > 0 {
-			//_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
-		}
-	}
+	user.finalizeInviteReward(inviterId)
 }
 
 func (user *User) FinishInsert(inviterId int) {
@@ -608,8 +591,17 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 			defaultSetting := dto.UserSetting{}
 			user.SetSetting(defaultSetting)
 		}
+		user.InviterId = inviterId
 
-		return tx.Create(user).Error
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		if inviterId != 0 {
+			if _, err := applyInviteRewardWithTx(tx, inviterId, user.Id); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -632,16 +624,34 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	if common.QuotaForNewUser > 0 {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
-	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
-		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-		}
-		if common.QuotaForInviter > 0 {
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
-		}
+	user.finalizeInviteReward(inviterId)
+}
+
+func (user *User) finalizeInviteReward(inviterId int) {
+	if inviterId == 0 {
+		return
 	}
+	if err := InvalidateUserCache(inviterId); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate inviter cache for user %d: %s", inviterId, err.Error()))
+	}
+	if err := InvalidateUserCache(user.Id); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate invitee cache for user %d: %s", user.Id, err.Error()))
+	}
+
+	var reward InviteReward
+	if err := DB.Where("invitee_id = ? AND inviter_id = ?", user.Id, inviterId).First(&reward).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			common.SysError(fmt.Sprintf("failed to load referral reward log data inviter=%d invitee=%d: %s", inviterId, user.Id, err.Error()))
+		}
+		return
+	}
+	RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("成功受邀，获得 %s Default 池额度", logger.LogQuota(reward.InviteeQuota)))
+	inviterReward := reward.InviterBaseQuota + reward.InviterMilestoneQuota
+	content := fmt.Sprintf("成功邀请第 %d 位用户，获得 %s Default 池额度", reward.InviteCount, logger.LogQuota(inviterReward))
+	if reward.InviterMilestoneQuota > 0 {
+		content += fmt.Sprintf("（含累计邀请 %d 人奖励 %s）", reward.InviteCount, logger.LogQuota(reward.InviterMilestoneQuota))
+	}
+	RecordLog(inviterId, LogTypeSystem, content)
 }
 
 func (user *User) Update(updatePassword bool) error {

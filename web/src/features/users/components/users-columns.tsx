@@ -22,17 +22,16 @@ import { useTranslation } from 'react-i18next'
 import { BadgeCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { LongText } from '@/components/long-text'
+import { PremiumUsername } from '@/components/premium-username'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Progress } from '@/components/ui/progress'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { formatQuota, formatTimestamp } from '@/lib/format'
-import { cn } from '@/lib/utils'
 
 import {
   USER_STATUS,
@@ -42,12 +41,6 @@ import {
 } from '../constants'
 import type { User } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
-
-function getQuotaProgressColor(percentage: number): string {
-  if (percentage <= 10) return '[&_[data-slot=progress-indicator]]:bg-rose-500'
-  if (percentage <= 30) return '[&_[data-slot=progress-indicator]]:bg-amber-500'
-  return '[&_[data-slot=progress-indicator]]:bg-emerald-500'
-}
 
 export function useUsersColumns(): ColumnDef<User>[] {
   const { t } = useTranslation()
@@ -100,9 +93,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
         return (
           <div className='flex min-w-[160px] flex-col gap-1'>
             <div className='flex items-center gap-2'>
-              <LongText className='max-w-[140px] font-medium'>
-                {username}
-              </LongText>
+              <PremiumUsername
+                name={username}
+                tier={row.original.premium_tier}
+                className='max-w-[140px] font-medium'
+              />
               {remark && (
                 <Tooltip>
                   <TooltipTrigger
@@ -170,64 +165,39 @@ export function useUsersColumns(): ColumnDef<User>[] {
     {
       id: 'quota',
       accessorKey: 'quota',
-      header: t('Quota'),
+      header: t('Default Pool Balance'),
       cell: ({ row }) => {
-        const user = row.original
-        const used = user.used_quota
-        const remaining = user.quota
-        const total = used + remaining
-        const percentage = total > 0 ? (remaining / total) * 100 : 0
-
-        if (total === 0) {
-          return (
-            <StatusBadge
-              label={t('No Quota')}
-              variant='neutral'
-              copyable={false}
-              className='-ml-1.5'
-            />
-          )
-        }
-
+        const balance = row.original.quota
         return (
-          <Tooltip>
-            <TooltipTrigger
-              render={<div className='w-[150px] cursor-help space-y-1' />}
-            >
-              <div className='flex justify-between text-xs'>
-                <span className='font-medium tabular-nums'>
-                  {formatQuota(remaining)}
-                </span>
-                <span className='text-muted-foreground tabular-nums'>
-                  {formatQuota(total)}
-                </span>
-              </div>
-              <Progress
-                value={percentage}
-                className={cn('h-1.5', getQuotaProgressColor(percentage))}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className='space-y-1 text-xs'>
-                <div>
-                  {t('Used:')} {formatQuota(used)}
-                </div>
-                <div>
-                  {t('Remaining:')} {formatQuota(remaining)}
-                </div>
-                <div>
-                  {t('Total:')} {formatQuota(total)}
-                </div>
-                <div>
-                  {t('Percentage:')} {percentage.toFixed(1)}%
-                </div>
-              </div>
-            </TooltipContent>
-          </Tooltip>
+          <div className='min-w-[130px]'>
+            <div className='font-mono text-sm font-medium tabular-nums'>
+              {formatQuota(balance)}
+            </div>
+            <div className='text-muted-foreground mt-0.5 text-[11px]'>
+              {t('Default shared pool only')}
+            </div>
+          </div>
         )
       },
-      size: 170,
+      size: 160,
       meta: { mobileOrder: 40 },
+    },
+    {
+      id: 'used_quota',
+      accessorKey: 'used_quota',
+      header: t('Total Usage'),
+      cell: ({ row }) => (
+        <div className='min-w-[130px]'>
+          <div className='font-mono text-sm font-medium tabular-nums'>
+            {formatQuota(row.original.used_quota)}
+          </div>
+          <div className='text-muted-foreground mt-0.5 text-[11px]'>
+            {t('Default and private pools')}
+          </div>
+        </div>
+      ),
+      size: 160,
+      meta: { mobileOrder: 50 },
     },
     {
       accessorKey: 'group',

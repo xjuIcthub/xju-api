@@ -284,9 +284,11 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 }
 
 func (token *Token) Insert() error {
-	var err error
-	err = DB.Create(token).Error
-	return err
+	return token.InsertWithTx(DB)
+}
+
+func (token *Token) InsertWithTx(tx *gorm.DB) error {
+	return tx.Create(token).Error
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values

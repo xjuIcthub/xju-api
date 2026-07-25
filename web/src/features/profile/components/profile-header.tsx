@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Activity, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { PremiumUsername } from '@/components/premium-username'
 import { StatusBadge } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
@@ -92,16 +93,16 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Current Balance'),
+      label: t('Default Pool Balance'),
       value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
+      description: t('Available for the Default shared pool'),
       icon: WalletCards,
       tone: 'success',
     },
     {
       label: t('Total Usage'),
       value: formatQuota(profile.used_quota),
-      description: t('Total consumed quota'),
+      description: t('Cumulative usage across all pools'),
       icon: BarChart3,
       tone: 'info',
     },
@@ -129,8 +130,12 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
 
           <div className='min-w-0 flex-1 space-y-1.5 sm:space-y-3'>
             <div className='flex min-w-0 items-center gap-2'>
-              <h1 className='truncate text-xl font-semibold tracking-tight sm:text-2xl'>
-                {displayName}
+              <h1 className='min-w-0 text-xl font-semibold tracking-tight sm:text-2xl'>
+                <PremiumUsername
+                  name={displayName}
+                  tier={profile.premium_tier}
+                  className='max-w-full'
+                />
               </h1>
               <StatusBadge
                 label={roleLabel}

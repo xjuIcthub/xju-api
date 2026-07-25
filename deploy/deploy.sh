@@ -2,7 +2,7 @@
 # deploy/deploy.sh — claude-tri 完整部署总入口。
 #
 # 顺序:
-#   拉取 main → 项目护栏 → 前端/Go 构建 → 换容器/失败回滚
+#   拉取 main → 项目护栏 → 校验预装前端 + Go 构建 → 换容器/失败回滚
 #   → Docker 清理 → 本地/公网/API/服务检查。
 #
 # 用法:
@@ -25,6 +25,7 @@ CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 CHECK_PROVISION="${CHECK_PROVISION:-1}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:3000/api/status}"
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://api.selab.top/api/status}"
+SKIP_WEB="${SKIP_WEB:-1}"
 
 usage() {
 	cat <<'EOF'
@@ -33,7 +34,7 @@ usage() {
 完整执行:
   1. fast-forward origin/main
   2. scripts/check-guardrails.sh
-  3. deploy/deploy-newapi.sh(前端 + Go + 换容器 + 健康检查/失败回滚)
+  3. deploy/deploy-newapi.sh(校验预装前端 + Go + 换容器 + 健康检查/失败回滚)
   4. deploy/prune-docker.sh
   5. 检查本地 API、公网 API、new-api 镜像与 xju-provision
 
@@ -81,7 +82,7 @@ if [[ "$PULL" == 1 && "${XJU_DEPLOY_ALL_AFTER_PULL:-0}" != 1 ]]; then
 	exec env XJU_DEPLOY_ALL_AFTER_PULL=1 PULL="$PULL" PRUNE="$PRUNE" \
 		BRANCH="$BRANCH" CHECK_PUBLIC="$CHECK_PUBLIC" \
 		CHECK_PROVISION="$CHECK_PROVISION" LOCAL_HEALTH_URL="$LOCAL_HEALTH_URL" \
-		PUBLIC_HEALTH_URL="$PUBLIC_HEALTH_URL" SKIP_WEB="${SKIP_WEB:-0}" \
+		PUBLIC_HEALTH_URL="$PUBLIC_HEALTH_URL" SKIP_WEB="$SKIP_WEB" \
 		ROLLBACK="${ROLLBACK:-1}" HEALTH_RETRIES="${HEALTH_RETRIES:-30}" \
 		HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}" \
 		bash "$REPO_ROOT/deploy/deploy.sh" "$@"
@@ -92,7 +93,7 @@ bash "$REPO_ROOT/scripts/check-guardrails.sh"
 
 echo "==> [3/5] 构建并部署 New API"
 PULL=0 PRUNE=0 HEALTH_URL="$LOCAL_HEALTH_URL" \
-	SKIP_WEB="${SKIP_WEB:-0}" ROLLBACK="${ROLLBACK:-1}" \
+	SKIP_WEB="$SKIP_WEB" ROLLBACK="${ROLLBACK:-1}" \
 	HEALTH_RETRIES="${HEALTH_RETRIES:-30}" \
 	HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}" \
 	bash "$REPO_ROOT/deploy/deploy-newapi.sh" "$@"

@@ -25,6 +25,7 @@ import { UsersMutateDrawer } from './components/users-mutate-drawer'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider, useUsers } from './components/users-provider'
 import { UsersTable } from './components/users-table'
+import { UsersUsageSummary } from './components/users-usage-summary'
 
 function UsersContent() {
   const { t } = useTranslation()
@@ -38,7 +39,12 @@ function UsersContent() {
           <UsersPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <UsersTable />
+          <div className='flex min-h-0 flex-1 flex-col gap-3'>
+            <UsersUsageSummary />
+            <div className='min-h-0 flex-1'>
+              <UsersTable />
+            </div>
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

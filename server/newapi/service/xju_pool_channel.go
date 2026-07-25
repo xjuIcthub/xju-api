@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -33,6 +34,28 @@ var poolAdvancedCustomPaths = []string{
 	"/v1/completions",
 	"/v1/responses",
 	"/v1/responses/compact",
+}
+
+var poolGroupOptionsMu sync.Mutex
+
+func GetDefaultPoolPricingMultiplier() float64 {
+	return ratio_setting.GetGroupRatio("default")
+}
+
+func SetDefaultPoolPricingMultiplier(multiplier float64) error {
+	poolGroupOptionsMu.Lock()
+	defer poolGroupOptionsMu.Unlock()
+
+	groupRatios := ratio_setting.GetGroupRatioCopy()
+	if groupRatios == nil {
+		groupRatios = map[string]float64{}
+	}
+	groupRatios["default"] = multiplier
+	encoded, err := common.Marshal(groupRatios)
+	if err != nil {
+		return err
+	}
+	return model.UpdateOption("GroupRatio", string(encoded))
 }
 
 func poolChannelName(poolID string) string { return "cliproxy-pool-" + poolID }
@@ -209,6 +232,9 @@ func deletePoolChannel(poolID, groupKey string, channelID int) {
 // addPoolGroupOptions always registers billing ratio. Only shared/admin pools
 // are added to global UserUsableGroups; private groups remain owner-scoped.
 func addPoolGroupOptions(groupKey, label string, globallyVisible bool) error {
+	poolGroupOptionsMu.Lock()
+	defer poolGroupOptionsMu.Unlock()
+
 	gr := ratio_setting.GetGroupRatioCopy()
 	if gr == nil {
 		gr = map[string]float64{}
@@ -247,6 +273,9 @@ func addPoolGroupOptions(groupKey, label string, globallyVisible bool) error {
 }
 
 func removePoolGroupOptions(groupKey string) {
+	poolGroupOptionsMu.Lock()
+	defer poolGroupOptionsMu.Unlock()
+
 	gr := ratio_setting.GetGroupRatioCopy()
 	if _, ok := gr[groupKey]; ok {
 		delete(gr, groupKey)
@@ -378,6 +407,9 @@ func groupInUse(group, exceptGroup string) bool {
 // migratePoolGroupOptions moves the GroupRatio value and UserUsableGroups entry
 // from oldGroup to newGroup (labelled newLabel), preserving the ratio.
 func migratePoolGroupOptions(oldGroup, newGroup, newLabel string) {
+	poolGroupOptionsMu.Lock()
+	defer poolGroupOptionsMu.Unlock()
+
 	gr := ratio_setting.GetGroupRatioCopy()
 	if gr == nil {
 		gr = map[string]float64{}
@@ -404,6 +436,9 @@ func migratePoolGroupOptions(oldGroup, newGroup, newLabel string) {
 
 // setPoolGroupLabel refreshes only a group's display label (its key is unchanged).
 func setPoolGroupLabel(group, label string) {
+	poolGroupOptionsMu.Lock()
+	defer poolGroupOptionsMu.Unlock()
+
 	uug := setting.GetUserUsableGroupsCopy()
 	if uug == nil {
 		uug = map[string]string{}

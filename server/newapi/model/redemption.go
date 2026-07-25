@@ -181,6 +181,9 @@ func Redeem(key string, userId int) (quota int, err error) {
 		common.SysError("redemption failed: " + err.Error())
 		return 0, ErrRedeemFailed
 	}
+	if err := InvalidateUserCache(userId); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate redemption quota cache for user %d: %s", userId, err.Error()))
+	}
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
 	return redemption.Quota, nil
 }

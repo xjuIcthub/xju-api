@@ -21,6 +21,7 @@ import { X, User, LogOut } from 'lucide-react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
+import { PremiumUsername } from '@/components/premium-username'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -95,9 +96,11 @@ function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
             <AvatarFallback className='text-xs'>{initials}</AvatarFallback>
           </Avatar>
           <div className='flex flex-1 flex-col gap-0.5 overflow-hidden'>
-            <p className='text-foreground truncate font-medium'>
-              {displayName}
-            </p>
+            <PremiumUsername
+              name={displayName}
+              tier={user.premium_tier}
+              className='w-fit max-w-full font-medium'
+            />
             <div className='flex items-center gap-1.5'>
               <span className='text-muted-foreground text-xs'>{roleLabel}</span>
               {user.group && (

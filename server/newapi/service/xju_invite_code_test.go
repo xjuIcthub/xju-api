@@ -1,18 +1,17 @@
 package service
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
-
-// xju-api:new — ConsumeInviteCodeForRegistration 的消费/回滚协议测试
-// (REFACTOR-PLAN §5.2 Register 收口,单测先行)。风险点:邀请码泄漏
-// (消费后未回滚)与永久占用(回滚把已归属的码复活),两者都在此锁死。
 
 func seedInviteCode(t *testing.T, code string, status int, expiredTime int64) {
 	t.Helper()
@@ -23,6 +22,9 @@ func seedInviteCode(t *testing.T, code string, status int, expiredTime int64) {
 		CreatedTime: common.GetTimestamp(),
 		ExpiredTime: expiredTime,
 	}).Error)
+	t.Cleanup(func() {
+		model.DB.Unscoped().Where("code = ?", code).Delete(&model.InviteCode{})
+	})
 }
 
 func fetchInviteCode(t *testing.T, code string) *model.InviteCode {
@@ -34,124 +36,196 @@ func fetchInviteCode(t *testing.T, code string) *model.InviteCode {
 
 func withInviteCodeRequired(t *testing.T, required bool) {
 	t.Helper()
-	prev := common.InviteCodeRequired
+	previous := common.InviteCodeRequired
 	common.InviteCodeRequired = required
-	t.Cleanup(func() { common.InviteCodeRequired = prev })
+	t.Cleanup(func() { common.InviteCodeRequired = previous })
 }
 
-func TestConsumeInviteCodeForRegistration_RequiredOff(t *testing.T) {
+func createInviteTestUser(t *testing.T, username string, affCode string) model.User {
+	t.Helper()
+	user := model.User{
+		Username:    username,
+		DisplayName: username,
+		AffCode:     affCode,
+		Status:      common.UserStatusEnabled,
+		Role:        common.RoleCommonUser,
+	}
+	require.NoError(t, model.DB.Create(&user).Error)
+	t.Cleanup(func() {
+		model.DB.Unscoped().Delete(&user)
+	})
+	return user
+}
+
+func TestResolveRegistrationInvite_RequiredOffIgnoresAdminAndUnknownCodes(t *testing.T) {
 	withInviteCodeRequired(t, false)
-	seedInviteCode(t, "off-code-000000000000000000000", common.InviteCodeStatusEnabled, 0)
+	seedInviteCode(t, "required-off-admin-code", common.InviteCodeStatusEnabled, 0)
 
-	release, commit, err := ConsumeInviteCodeForRegistration("off-code-000000000000000000000")
-	require.NoError(t, err)
-	require.NotNil(t, release)
-	require.NotNil(t, commit)
-
-	// 开关关闭 = 完全不触碰邀请码表;release/commit 都必须是安全 no-op。
-	release()
-	commit(42)
-	ic := fetchInviteCode(t, "off-code-000000000000000000000")
-	assert.Equal(t, common.InviteCodeStatusEnabled, ic.Status)
-	assert.Equal(t, 0, ic.UsedUserId)
+	for _, code := range []string{"", "unknown-code", "required-off-admin-code"} {
+		err := model.DB.Transaction(func(tx *gorm.DB) error {
+			invite, err := ResolveRegistrationInviteWithTx(tx, code)
+			require.NoError(t, err)
+			assert.Zero(t, invite.InviterID)
+			assert.Empty(t, invite.AdminCode)
+			return ConsumeRegistrationInviteWithTx(tx, invite, 42)
+		})
+		require.NoError(t, err)
+	}
+	assert.Equal(t, common.InviteCodeStatusEnabled, fetchInviteCode(t, "required-off-admin-code").Status)
 }
 
-func TestConsumeInviteCodeForRegistration_ConsumeAndCommit(t *testing.T) {
+func TestResolveRegistrationInvite_PersonalCodeIsReusable(t *testing.T) {
 	withInviteCodeRequired(t, true)
-	seedInviteCode(t, "commit-code-000000000000000000", common.InviteCodeStatusEnabled, 0)
+	referrer := createInviteTestUser(t, "transactional-referrer", "share-transactionally")
 
-	release, commit, err := ConsumeInviteCodeForRegistration("commit-code-000000000000000000")
-	require.NoError(t, err)
+	for attempt := 0; attempt < 3; attempt++ {
+		err := model.DB.Transaction(func(tx *gorm.DB) error {
+			invite, err := ResolveRegistrationInviteWithTx(tx, "share-transactionally")
+			require.NoError(t, err)
+			assert.Equal(t, referrer.Id, invite.InviterID)
+			assert.Empty(t, invite.AdminCode)
+			return ConsumeRegistrationInviteWithTx(tx, invite, 100+attempt)
+		})
+		require.NoError(t, err)
+	}
 
-	// 消费即置 used,并发第二次注册不可能再拿到同一码。
-	assert.Equal(t, common.InviteCodeStatusUsed, fetchInviteCode(t, "commit-code-000000000000000000").Status)
-
-	commit(42)
-	ic := fetchInviteCode(t, "commit-code-000000000000000000")
-	assert.Equal(t, common.InviteCodeStatusUsed, ic.Status)
-	assert.Equal(t, 42, ic.UsedUserId)
-
-	// commit 之后 release 必须是 no-op —— 已归属的码绝不能被复活(永久占用风险的反面)。
-	release()
-	ic = fetchInviteCode(t, "commit-code-000000000000000000")
-	assert.Equal(t, common.InviteCodeStatusUsed, ic.Status)
-	assert.Equal(t, 42, ic.UsedUserId)
+	var count int64
+	require.NoError(t, model.DB.Model(&model.InviteCode{}).
+		Where("code = ?", "share-transactionally").Count(&count).Error)
+	assert.Zero(t, count)
 }
 
-func TestConsumeInviteCodeForRegistration_ReleaseRollsBack(t *testing.T) {
+func TestRegistrationInvite_AdminCodeCommitsWithUserID(t *testing.T) {
 	withInviteCodeRequired(t, true)
-	seedInviteCode(t, "release-code-00000000000000000", common.InviteCodeStatusEnabled, 0)
+	seedInviteCode(t, "transactional-admin-commit", common.InviteCodeStatusEnabled, 0)
 
-	release, commit, err := ConsumeInviteCodeForRegistration("release-code-00000000000000000")
+	var user model.User
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		invite, err := ResolveRegistrationInviteWithTx(tx, "transactional-admin-commit")
+		if err != nil {
+			return err
+		}
+		user = model.User{
+			Username:    "admin-code-commit-user",
+			DisplayName: "admin-code-commit-user",
+			AffCode:     "admin-code-commit-aff",
+			Status:      common.UserStatusEnabled,
+			Role:        common.RoleCommonUser,
+		}
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		return ConsumeRegistrationInviteWithTx(tx, invite, user.Id)
+	})
 	require.NoError(t, err)
+	t.Cleanup(func() { model.DB.Unscoped().Delete(&user) })
 
-	// 注册失败 → release 把码放回池子(否则邀请码泄漏:没注册成却烧掉一张码)。
-	release()
-	ic := fetchInviteCode(t, "release-code-00000000000000000")
-	assert.Equal(t, common.InviteCodeStatusEnabled, ic.Status)
-	assert.Equal(t, 0, ic.UsedUserId)
-
-	// release 幂等;release 之后 commit 也必须是 no-op(码已回池,不能再标 used_user_id)。
-	release()
-	commit(42)
-	ic = fetchInviteCode(t, "release-code-00000000000000000")
-	assert.Equal(t, common.InviteCodeStatusEnabled, ic.Status)
-	assert.Equal(t, 0, ic.UsedUserId)
-
-	// 回池后的码可再次被消费(复活语义)。
-	_, _, err = ConsumeInviteCodeForRegistration("release-code-00000000000000000")
-	require.NoError(t, err)
+	code := fetchInviteCode(t, "transactional-admin-commit")
+	assert.Equal(t, common.InviteCodeStatusUsed, code.Status)
+	assert.Equal(t, user.Id, code.UsedUserId)
+	assert.NotZero(t, code.UsedTime)
 }
 
-func TestConsumeInviteCodeForRegistration_RejectsUnusableCodes(t *testing.T) {
+func TestRegistrationInvite_RollbackRestoresCodeAndUserTogether(t *testing.T) {
 	withInviteCodeRequired(t, true)
-	seedInviteCode(t, "used-code-00000000000000000000", common.InviteCodeStatusUsed, 0)
-	seedInviteCode(t, "disabled-code-0000000000000000", common.InviteCodeStatusDisabled, 0)
-	seedInviteCode(t, "expired-code-00000000000000000", common.InviteCodeStatusEnabled, common.GetTimestamp()-60)
+	seedInviteCode(t, "transactional-admin-rollback", common.InviteCodeStatusEnabled, 0)
+	rollbackErr := errors.New("simulate failure after invite consume")
 
-	cases := []struct {
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		invite, err := ResolveRegistrationInviteWithTx(tx, "transactional-admin-rollback")
+		if err != nil {
+			return err
+		}
+		user := model.User{
+			Username:    "rolled-back-invite-user",
+			DisplayName: "rolled-back-invite-user",
+			AffCode:     "rolled-back-invite-aff",
+			Status:      common.UserStatusEnabled,
+			Role:        common.RoleCommonUser,
+		}
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		if err := ConsumeRegistrationInviteWithTx(tx, invite, user.Id); err != nil {
+			return err
+		}
+		return rollbackErr
+	})
+	require.ErrorIs(t, err, rollbackErr)
+
+	var userCount int64
+	require.NoError(t, model.DB.Unscoped().Model(&model.User{}).
+		Where("username = ?", "rolled-back-invite-user").Count(&userCount).Error)
+	assert.Zero(t, userCount)
+	code := fetchInviteCode(t, "transactional-admin-rollback")
+	assert.Equal(t, common.InviteCodeStatusEnabled, code.Status)
+	assert.Zero(t, code.UsedUserId)
+	assert.Zero(t, code.UsedTime)
+}
+
+func TestRegistrationInvite_RejectsMissingOrUnusableCodes(t *testing.T) {
+	withInviteCodeRequired(t, true)
+	seedInviteCode(t, "transactional-used-code", common.InviteCodeStatusUsed, 0)
+	seedInviteCode(t, "transactional-disabled-code", common.InviteCodeStatusDisabled, 0)
+	seedInviteCode(t, "transactional-expired-code", common.InviteCodeStatusEnabled, common.GetTimestamp()-60)
+
+	testCases := []struct {
 		name string
 		code string
 	}{
-		{"empty", ""},
-		{"unknown", "no-such-code"},
-		{"already used", "used-code-00000000000000000000"},
-		{"disabled", "disabled-code-0000000000000000"},
-		{"expired", "expired-code-00000000000000000"},
+		{name: "missing", code: ""},
+		{name: "unknown", code: "transactional-unknown-code"},
+		{name: "used", code: "transactional-used-code"},
+		{name: "disabled", code: "transactional-disabled-code"},
+		{name: "expired", code: "transactional-expired-code"},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := ConsumeInviteCodeForRegistration(tc.code)
-			assert.Error(t, err)
+	for index, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := model.DB.Transaction(func(tx *gorm.DB) error {
+				invite, err := ResolveRegistrationInviteWithTx(tx, testCase.code)
+				if err != nil {
+					return err
+				}
+				return ConsumeRegistrationInviteWithTx(tx, invite, 500+index)
+			})
+			require.ErrorIs(t, err, ErrRegistrationInviteInvalid)
 		})
 	}
-	// 过期码被拒后状态不被改写。
-	assert.Equal(t, common.InviteCodeStatusEnabled, fetchInviteCode(t, "expired-code-00000000000000000").Status)
+	assert.Equal(t, common.InviteCodeStatusEnabled, fetchInviteCode(t, "transactional-expired-code").Status)
 }
 
-func TestConsumeInviteCodeForRegistration_ConcurrentSingleUse(t *testing.T) {
+func TestRegistrationInvite_ConcurrentSingleUse(t *testing.T) {
 	withInviteCodeRequired(t, true)
-	seedInviteCode(t, "race-code-00000000000000000000", common.InviteCodeStatusEnabled, 0)
+	seedInviteCode(t, "transactional-race-code", common.InviteCodeStatusEnabled, 0)
 
 	const attempts = 8
-	var wg sync.WaitGroup
+	var wait sync.WaitGroup
 	errs := make([]error, attempts)
-	for i := 0; i < attempts; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			_, _, errs[idx] = ConsumeInviteCodeForRegistration("race-code-00000000000000000000")
-		}(i)
+	for index := 0; index < attempts; index++ {
+		wait.Add(1)
+		go func(attempt int) {
+			defer wait.Done()
+			errs[attempt] = model.DB.Transaction(func(tx *gorm.DB) error {
+				invite, err := ResolveRegistrationInviteWithTx(tx, "transactional-race-code")
+				if err != nil {
+					return err
+				}
+				return ConsumeRegistrationInviteWithTx(tx, invite, 700+attempt)
+			})
+		}(index)
 	}
-	wg.Wait()
+	wait.Wait()
 
-	wins := 0
+	successes := 0
 	for _, err := range errs {
 		if err == nil {
-			wins++
+			successes++
+			continue
 		}
+		assert.Error(t, err)
 	}
-	// 状态 CAS 保证一码一用:并发注册恰有一个赢家。
-	assert.Equal(t, 1, wins)
-	assert.Equal(t, common.InviteCodeStatusUsed, fetchInviteCode(t, "race-code-00000000000000000000").Status)
+	assert.Equal(t, 1, successes)
+	code := fetchInviteCode(t, "transactional-race-code")
+	assert.Equal(t, common.InviteCodeStatusUsed, code.Status)
+	assert.NotZero(t, code.UsedUserId)
 }

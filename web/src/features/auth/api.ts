@@ -85,18 +85,25 @@ export async function githubOAuthStart(clientId: string, state: string) {
   window.open(url)
 }
 
-// Get OAuth state for CSRF protection
-export async function getOAuthState(): Promise<string> {
-  const aff =
-    typeof window !== 'undefined' ? (localStorage.getItem('aff') ?? '') : ''
-  const res = await api.get('/api/oauth/state', { params: { aff } })
+// Get OAuth state for CSRF protection. Registration passes the current form
+// value explicitly; login/bind callers pass no code, preventing stale referral
+// values from a previous browser session from leaking into a new account.
+export async function getOAuthState(affCode = ''): Promise<string> {
+  const res = await api.get('/api/oauth/state', {
+    params: { aff: affCode.trim() },
+  })
   if (res.data?.success) return res.data.data
   return ''
 }
 
 // WeChat login by authorization code
-export async function wechatLoginByCode(code: string): Promise<ApiResponse> {
-  const res = await api.get('/api/oauth/wechat', { params: { code } })
+export async function wechatLoginByCode(
+  code: string,
+  affCode = ''
+): Promise<ApiResponse> {
+  const res = await api.get('/api/oauth/wechat', {
+    params: { code, aff: affCode.trim() },
+  })
   return res.data
 }
 

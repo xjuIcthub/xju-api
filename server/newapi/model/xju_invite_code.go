@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var ErrInviteCodeUnavailable = errors.New("invite code is invalid, expired, disabled, or already used")
+
 // InviteCode is a single-use registration invite code. Admins generate them in
 // batches; a code is consumed (Status -> Used) the moment a new user registers
 // with it. Codes may carry an optional expiry and can be disabled by an admin.
@@ -142,16 +144,16 @@ func ValidateInviteCode(code string) error {
 	return nil
 }
 
-// ConsumeInviteCode atomically marks an enabled, unexpired code as used. The
-// compare-and-swap on status means a concurrent consume of the same code loses
-// here even without a row lock (e.g. on SQLite), so a single-use code can never
-// be spent twice.
-func ConsumeInviteCode(code string, userId int) error {
+// ConsumeInviteCodeWithTx atomically consumes a single-use registration code
+// inside the caller's user-creation transaction. This keeps the new account,
+// its reward, and used_user_id in one commit boundary. The compare-and-swap on
+// status means concurrent registrations cannot spend the same code twice.
+func ConsumeInviteCodeWithTx(tx *gorm.DB, code string, userId int) error {
 	if code == "" {
-		return errors.New("invite code required")
+		return ErrInviteCodeUnavailable
 	}
 	now := common.GetTimestamp()
-	result := DB.Model(&InviteCode{}).
+	result := tx.Model(&InviteCode{}).
 		Where("code = ? AND status = ? AND (expired_time = 0 OR expired_time >= ?)",
 			code, common.InviteCodeStatusEnabled, now).
 		Updates(map[string]interface{}{
@@ -163,25 +165,7 @@ func ConsumeInviteCode(code string, userId int) error {
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("invalid or already-used invite code")
+		return ErrInviteCodeUnavailable
 	}
 	return nil
-}
-
-// ReleaseInviteCode reverts a consumed code back to enabled. It is the rollback
-// for a registration that failed after the code was already consumed.
-func ReleaseInviteCode(code string) error {
-	return DB.Model(&InviteCode{}).
-		Where("code = ? AND status = ?", code, common.InviteCodeStatusUsed).
-		Updates(map[string]interface{}{
-			"status":       common.InviteCodeStatusEnabled,
-			"used_user_id": 0,
-			"used_time":    0,
-		}).Error
-}
-
-// SetInviteCodeUser records which user finally consumed the code, once the new
-// account id is known.
-func SetInviteCodeUser(code string, userId int) error {
-	return DB.Model(&InviteCode{}).Where("code = ?", code).Update("used_user_id", userId).Error
 }

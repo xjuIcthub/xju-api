@@ -32,13 +32,15 @@ func GetCheckinStatus(c *gin.Context) {
 		return
 	}
 
+	rewardQuota := model.DailyCheckinQuota()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"enabled":   setting.Enabled,
-			"min_quota": setting.MinQuota,
-			"max_quota": setting.MaxQuota,
-			"stats":     stats,
+			"enabled":      setting.Enabled,
+			"reward_quota": rewardQuota,
+			"min_quota":    rewardQuota,
+			"max_quota":    rewardQuota,
+			"stats":        stats,
 		},
 	})
 }

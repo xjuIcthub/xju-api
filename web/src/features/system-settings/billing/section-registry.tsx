@@ -58,8 +58,6 @@ const BILLING_SECTIONS = [
         defaultValues={{
           QuotaForNewUser: settings.QuotaForNewUser,
           PreConsumedQuota: settings.PreConsumedQuota,
-          QuotaForInviter: settings.QuotaForInviter,
-          QuotaForInvitee: settings.QuotaForInvitee,
           TopUpLink: settings.TopUpLink,
           general_setting: {
             docs_link: settings['general_setting.docs_link'],
@@ -69,10 +67,6 @@ const BILLING_SECTIONS = [
               settings['quota_setting.enable_free_model_pre_consume'],
           },
         }}
-        complianceConfirmed={
-          (settings['payment_setting.compliance_confirmed'] ?? false) &&
-          settings['payment_setting.compliance_terms_version'] === 'v1'
-        }
       />
     ),
   },
@@ -125,9 +119,9 @@ const BILLING_SECTIONS = [
       />
     ),
   },
-  // xju-api:prune (PLAN.md §5.3): the 'payment' (Payment Gateway) and
-  // 'checkin' (Check-in Rewards) sections are removed — day-cards are issued
-  // by the operator, there is no self-service top-up or quota giveaway.
+  // xju-api:prune (PLAN.md §5.3): the legacy generic payment/check-in settings
+  // panels remain hidden. Default-pool recharge has its own focused page, and
+  // the daily reward is a fixed product rule rather than an editable range.
 ] as const
 
 export type BillingSectionId = (typeof BILLING_SECTIONS)[number]['id']

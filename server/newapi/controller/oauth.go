@@ -1,19 +1,85 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+const (
+	oauthStatesSessionKey = "oauth_states"
+	oauthStateTTL         = 10 * time.Minute
+	oauthStateLimit       = 8
+)
+
+type oauthStateEntry struct {
+	AffCode   string `json:"aff_code"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+func loadOAuthStates(session sessions.Session) map[string]oauthStateEntry {
+	states := map[string]oauthStateEntry{}
+	raw, _ := session.Get(oauthStatesSessionKey).(string)
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &states)
+	}
+	return states
+}
+
+func pruneOAuthStates(states map[string]oauthStateEntry, now time.Time) {
+	cutoff := now.Add(-oauthStateTTL).Unix()
+	for state, entry := range states {
+		if entry.CreatedAt < cutoff {
+			delete(states, state)
+		}
+	}
+	for len(states) >= oauthStateLimit {
+		oldestState := ""
+		oldestCreatedAt := int64(0)
+		for state, entry := range states {
+			if oldestState == "" || entry.CreatedAt < oldestCreatedAt {
+				oldestState = state
+				oldestCreatedAt = entry.CreatedAt
+			}
+		}
+		delete(states, oldestState)
+	}
+}
+
+func saveOAuthStates(session sessions.Session, states map[string]oauthStateEntry) error {
+	encoded, err := json.Marshal(states)
+	if err != nil {
+		return err
+	}
+	session.Set(oauthStatesSessionKey, string(encoded))
+	return session.Save()
+}
+
+func consumeOAuthState(session sessions.Session, state string, now time.Time) (string, bool, error) {
+	states := loadOAuthStates(session)
+	entry, ok := states[state]
+	if ok && entry.CreatedAt < now.Add(-oauthStateTTL).Unix() {
+		ok = false
+	}
+	delete(states, state)
+	if err := saveOAuthStates(session, states); err != nil {
+		return "", false, err
+	}
+	return entry.AffCode, ok, nil
+}
 
 // providerParams returns map with Provider key for i18n templates
 func providerParams(name string) map[string]any {
@@ -24,12 +90,18 @@ func providerParams(name string) map[string]any {
 func GenerateOAuthCode(c *gin.Context) {
 	session := sessions.Default(c)
 	state := common.GetRandomString(12)
-	affCode := c.Query("aff")
-	if affCode != "" {
-		session.Set("aff", affCode)
+	now := time.Now()
+	states := loadOAuthStates(session)
+	pruneOAuthStates(states, now)
+	states[state] = oauthStateEntry{
+		AffCode:   strings.TrimSpace(c.Query("aff")),
+		CreatedAt: now.Unix(),
 	}
-	session.Set("oauth_state", state)
-	err := session.Save()
+	// Drop legacy single-slot values so an old referral can never leak into a
+	// later OAuth attempt after this version is deployed.
+	session.Delete("aff")
+	session.Delete("oauth_state")
+	err := saveOAuthStates(session, states)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -55,9 +127,15 @@ func HandleOAuth(c *gin.Context) {
 
 	session := sessions.Default(c)
 
-	// 1. Validate state (CSRF protection)
+	// 1. Validate and consume state (CSRF protection). Each state carries its
+	// own referral code, so concurrent OAuth attempts cannot overwrite it.
 	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
+	affCode, stateOK, stateErr := consumeOAuthState(session, state, time.Now())
+	if stateErr != nil {
+		common.ApiError(c, stateErr)
+		return
+	}
+	if state == "" || !stateOK {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": i18n.T(c, i18n.MsgOAuthStateInvalid),
@@ -105,8 +183,12 @@ func HandleOAuth(c *gin.Context) {
 	}
 
 	// 7. Find or create user
-	user, err := findOrCreateOAuthUser(c, provider, oauthUser, session)
+	user, err := findOrCreateOAuthUser(provider, oauthUser, affCode)
 	if err != nil {
+		if errors.Is(err, service.ErrRegistrationInviteInvalid) {
+			common.ApiErrorI18n(c, i18n.MsgUserInviteCodeRequired)
+			return
+		}
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
 			return
@@ -203,7 +285,7 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 }
 
 // findOrCreateOAuthUser finds existing user or creates new user
-func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *oauth.OAuthUser, session sessions.Session) (*model.User, error) {
+func findOrCreateOAuthUser(provider oauth.Provider, oauthUser *oauth.OAuthUser, affCode string) (*model.User, error) {
 	user := &model.User{}
 
 	// Check if user already exists with new ID
@@ -275,23 +357,21 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	user.Role = common.RoleCommonUser
 	user.Status = common.UserStatusEnabled
 
-	// Handle affiliate code
-	affCode := session.Get("aff")
-	inviterId := 0
-	if affCode != nil {
-		inviterId, _ = model.GetUserIdByAffCode(affCode.(string))
-	}
+	// Invite resolution, account creation, provider binding, reward credit, and
+	// single-use admin-code consumption share one transaction.
+	var registrationInvite service.RegistrationInvite
+	genericProvider, isGenericProvider := provider.(*oauth.GenericOAuthProvider)
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var resolveErr error
+		registrationInvite, resolveErr = service.ResolveRegistrationInviteWithTx(tx, affCode)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if err := user.InsertWithTx(tx, registrationInvite.InviterID); err != nil {
+			return err
+		}
 
-	// Use transaction to ensure user creation and OAuth binding are atomic
-	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {
-		// Custom provider: create user and binding in a transaction
-		err := model.DB.Transaction(func(tx *gorm.DB) error {
-			// Create user
-			if err := user.InsertWithTx(tx, inviterId); err != nil {
-				return err
-			}
-
-			// Create OAuth binding
+		if isGenericProvider {
 			binding := &model.UserOAuthBinding{
 				UserId:         user.Id,
 				ProviderId:     genericProvider.GetProviderId(),
@@ -300,24 +380,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 			if err := model.CreateUserOAuthBindingWithTx(tx, binding); err != nil {
 				return err
 			}
-
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Perform post-transaction tasks (logs, sidebar config, inviter rewards)
-		user.FinalizeOAuthUserCreation(inviterId)
-	} else {
-		// Built-in provider: create user and update provider ID in a transaction
-		err := model.DB.Transaction(func(tx *gorm.DB) error {
-			// Create user
-			if err := user.InsertWithTx(tx, inviterId); err != nil {
-				return err
-			}
-
-			// Set the provider user ID on the user model and update
+		} else {
 			provider.SetProviderUserID(user, oauthUser.ProviderUserID)
 			if err := tx.Model(user).Updates(map[string]interface{}{
 				"github_id":   user.GitHubId,
@@ -329,16 +392,15 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 			}).Error; err != nil {
 				return err
 			}
-
-			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
 
-		// Perform post-transaction tasks
-		user.FinalizeOAuthUserCreation(inviterId)
+		return service.ConsumeRegistrationInviteWithTx(tx, registrationInvite, user.Id)
+	})
+	if err != nil {
+		return nil, err
 	}
+
+	user.FinalizeOAuthUserCreation(registrationInvite.InviterID)
 
 	return user, nil
 }

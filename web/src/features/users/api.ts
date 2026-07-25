@@ -70,6 +70,15 @@ export async function searchUsers(
   return res.data
 }
 
+export interface UsersSummary {
+  total_used_quota: number
+}
+
+export async function getUsersSummary(): Promise<ApiResponse<UsersSummary>> {
+  const res = await api.get('/api/user/summary')
+  return res.data
+}
+
 /**
  * Get single user by ID
  */

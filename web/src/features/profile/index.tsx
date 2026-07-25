@@ -75,6 +75,7 @@ export function Profile() {
                     checkinEnabled={checkinEnabled}
                     turnstileEnabled={turnstileEnabled}
                     turnstileSiteKey={turnstileSiteKey}
+                    onCheckinSuccess={refreshProfile}
                   />
                 )}
                 {canConfigureSidebar && <SidebarModulesCard />}

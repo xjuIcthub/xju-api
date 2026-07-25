@@ -33,6 +33,7 @@ import type { SystemStatus } from '../types'
 
 type OAuthProvidersProps = {
   status: SystemStatus | null
+  affCode?: string
   disabled?: boolean
   className?: string
   onWeChatLogin?: () => void
@@ -49,6 +50,7 @@ type ProviderButton = {
 
 export function OAuthProviders({
   status,
+  affCode = '',
   disabled = false,
   className,
   onWeChatLogin,
@@ -65,7 +67,7 @@ export function OAuthProviders({
     handleLinuxDOLogin,
     handleTelegramLogin,
     handleCustomOAuthLogin,
-  } = useOAuthLogin(status)
+  } = useOAuthLogin(status, affCode)
 
   const providerButtons: ProviderButton[] = []
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +90,12 @@ func getUserQuotaForPaymentGuardTest(t *testing.T, userID int) int {
 
 func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	truncateTables(t)
+	paymentSetting := operation_setting.GetPaymentSetting()
+	originalOnlinePaymentEnabled := paymentSetting.OnlinePaymentEnabled
+	paymentSetting.OnlinePaymentEnabled = true
+	t.Cleanup(func() {
+		paymentSetting.OnlinePaymentEnabled = originalOnlinePaymentEnabled
+	})
 
 	insertUserForPaymentGuardTest(t, 101, 0)
 	insertTopUpForPaymentGuardTest(t, "waffo-pancake-guard", 101, PaymentProviderStripe)
@@ -100,6 +107,32 @@ func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 101))
+}
+
+func TestTopUpCreditFunctionsRejectWhenOnlinePaymentIsDisabled(t *testing.T) {
+	paymentSetting := operation_setting.GetPaymentSetting()
+	originalOnlinePaymentEnabled := paymentSetting.OnlinePaymentEnabled
+	paymentSetting.OnlinePaymentEnabled = false
+	t.Cleanup(func() {
+		paymentSetting.OnlinePaymentEnabled = originalOnlinePaymentEnabled
+	})
+
+	testCases := []struct {
+		name string
+		call func() error
+	}{
+		{name: "stripe", call: func() error { return Recharge("stripe-order", "customer", "127.0.0.1") }},
+		{name: "creem", call: func() error { return RechargeCreem("creem-order", "user@example.com", "user", "127.0.0.1") }},
+		{name: "waffo", call: func() error { return RechargeWaffo("waffo-order", "127.0.0.1") }},
+		{name: "waffo pancake", call: func() error { return RechargeWaffoPancake("waffo-pancake-order") }},
+		{name: "manual completion", call: func() error { return ManualCompleteTopUp("manual-order", "127.0.0.1") }},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ErrorIs(t, tc.call(), ErrOnlinePaymentDisabled)
+		})
+	}
 }
 
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {

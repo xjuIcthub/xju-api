@@ -2,7 +2,7 @@ package model
 
 import (
 	"errors"
-	"math/rand"
+	"fmt"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -49,29 +49,21 @@ func HasCheckedInToday(userId int) (bool, error) {
 	return count > 0, err
 }
 
+// DailyCheckinQuota is fixed at $0.10 in USD-equivalent quota. Keeping the
+// conversion dynamic means an administrator can change QuotaPerUnit without
+// silently changing the product's dollar reward.
+func DailyCheckinQuota() int {
+	return common.QuotaRound(common.QuotaPerUnit * 0.1)
+}
+
 // UserCheckin 执行用户签到
-// MySQL 和 PostgreSQL 使用事务保证原子性
-// SQLite 不支持嵌套事务，使用顺序操作 + 手动回滚
 func UserCheckin(userId int) (*Checkin, error) {
 	setting := operation_setting.GetCheckinSetting()
 	if !setting.Enabled {
 		return nil, errors.New("签到功能未启用")
 	}
 
-	// 检查今天是否已签到
-	hasChecked, err := HasCheckedInToday(userId)
-	if err != nil {
-		return nil, err
-	}
-	if hasChecked {
-		return nil, errors.New("今日已签到")
-	}
-
-	// 计算随机额度奖励
-	quotaAwarded := setting.MinQuota
-	if setting.MaxQuota > setting.MinQuota {
-		quotaAwarded = setting.MinQuota + rand.Intn(setting.MaxQuota-setting.MinQuota+1)
-	}
+	quotaAwarded := DailyCheckinQuota()
 
 	today := time.Now().Format("2006-01-02")
 	checkin := &Checkin{
@@ -81,62 +73,27 @@ func UserCheckin(userId int) (*Checkin, error) {
 		CreatedAt:    time.Now().Unix(),
 	}
 
-	// 根据数据库类型选择不同的策略
-	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
-		// SQLite 不支持嵌套事务，使用顺序操作 + 手动回滚
-		return userCheckinWithoutTransaction(checkin, userId, quotaAwarded)
-	}
-
-	// MySQL 和 PostgreSQL 支持事务，使用事务保证原子性
-	return userCheckinWithTransaction(checkin, userId, quotaAwarded)
-}
-
-// userCheckinWithTransaction 使用事务执行签到（适用于 MySQL 和 PostgreSQL）
-func userCheckinWithTransaction(checkin *Checkin, userId int, quotaAwarded int) (*Checkin, error) {
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		// 步骤1: 创建签到记录
-		// 数据库有唯一约束 (user_id, checkin_date)，可以防止并发重复签到
+		// The unique (user_id, checkin_date) key is the final concurrency guard.
 		if err := tx.Create(checkin).Error; err != nil {
-			return errors.New("签到失败，请稍后重试")
+			return errors.New("今日已签到")
 		}
-
-		// 步骤2: 在事务中增加用户额度
-		if err := tx.Model(&User{}).Where("id = ?", userId).
-			Update("quota", gorm.Expr("quota + ?", quotaAwarded)).Error; err != nil {
+		updated := tx.Model(&User{}).Where("id = ?", userId).
+			Update("quota", gorm.Expr("quota + ?", quotaAwarded))
+		if updated.Error != nil {
 			return errors.New("签到失败：更新额度出错")
 		}
-
+		if updated.RowsAffected != 1 {
+			return errors.New("签到失败：用户不存在")
+		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
-
-	// 事务成功后，异步更新缓存
-	go func() {
-		_ = cacheIncrUserQuota(userId, int64(quotaAwarded))
-	}()
-
-	return checkin, nil
-}
-
-// userCheckinWithoutTransaction 不使用事务执行签到（适用于 SQLite）
-func userCheckinWithoutTransaction(checkin *Checkin, userId int, quotaAwarded int) (*Checkin, error) {
-	// 步骤1: 创建签到记录
-	// 数据库有唯一约束 (user_id, checkin_date)，可以防止并发重复签到
-	if err := DB.Create(checkin).Error; err != nil {
-		return nil, errors.New("签到失败，请稍后重试")
+	if err := InvalidateUserCache(userId); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate check-in quota cache for user %d: %s", userId, err.Error()))
 	}
-
-	// 步骤2: 增加用户额度
-	// 使用 db=true 强制直接写入数据库，不使用批量更新
-	if err := IncreaseUserQuota(userId, quotaAwarded, true); err != nil {
-		// 如果增加额度失败，需要回滚签到记录
-		DB.Delete(checkin)
-		return nil, errors.New("签到失败：更新额度出错")
-	}
-
 	return checkin, nil
 }
 

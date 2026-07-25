@@ -27,6 +27,14 @@ func requirePaymentCompliance(c *gin.Context) bool {
 	return true
 }
 
+func requireOnlinePaymentEnabled(c *gin.Context) bool {
+	if !operation_setting.IsOnlinePaymentEnabled() {
+		common.ApiErrorMsg(c, "在线支付功能暂未开放")
+		return false
+	}
+	return true
+}
+
 func ConfirmPaymentCompliance(c *gin.Context) {
 	if c.GetBool("use_access_token") {
 		c.JSON(http.StatusForbidden, gin.H{

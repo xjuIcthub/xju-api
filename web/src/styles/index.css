@@ -133,6 +133,59 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
+/* Premium identity: antique/champagne gold with a restrained moving highlight. */
+.premium-username-gold {
+  color: transparent;
+  background-image: linear-gradient(
+    105deg,
+    #805b24 0%,
+    #c99b45 18%,
+    #f4e3ac 34%,
+    #a87228 49%,
+    #fff2c8 61%,
+    #bc8734 78%,
+    #76501f 100%
+  );
+  background-size: 240% 100%;
+  background-position: 10% 50%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  filter: drop-shadow(0 1px 7px rgb(167 120 43 / 18%));
+  animation: premium-gold-flow 4.8s ease-in-out infinite;
+}
+
+.premium-username-crown {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgb(27 23 17 / 25%));
+}
+
+.premium-username-crown-silver {
+  color: #d9e0ea;
+  fill: #8993a4;
+}
+
+.premium-username-crown-gold {
+  color: #f0d68b;
+  fill: #aa7428;
+}
+
+@keyframes premium-gold-flow {
+  0%,
+  100% {
+    background-position: 5% 50%;
+  }
+  50% {
+    background-position: 95% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-username-gold {
+    animation: none !important;
+    background-position: 48% 50%;
+  }
+}
+
 @utility container {
   margin-inline: auto;
   padding-inline: 2rem;

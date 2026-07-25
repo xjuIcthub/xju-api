@@ -4,7 +4,7 @@
 # 默认流程:
 #   1) 检查 tracked 工作区无本地修改;
 #   2) fast-forward 到 origin/main,并重新执行更新后的脚本;
-#   3) 在服务器完整构建前端 + New API 镜像;
+#   3) 校验本机传入的前端发布物,在服务器只构建 Go 镜像;
 #   4) 替换 new-api 容器并检查 /api/status;
 #   5) 失败时尝试恢复部署前镜像。
 #
@@ -14,7 +14,8 @@
 #
 # 可选环境变量:
 #   PULL=0         已手工拉取代码时跳过 git fetch/merge
-#   SKIP_WEB=1     使用 server/newapi/prebuilt/dist,跳过前端构建
+#   SKIP_WEB=1     使用已安装的 prebuilt/current(默认且生产必须保持为 1)
+#   SKIP_WEB=0     仅限非 tri 环境,允许在当前机器重新构建前端
 #   ROLLBACK=0     健康检查失败时不自动恢复旧镜像
 #   PRUNE=1        成功后运行 deploy/prune-docker.sh
 #   BRANCH=main    要部署的远端分支
@@ -29,18 +30,20 @@ PRUNE="${PRUNE:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/status}"
+SKIP_WEB="${SKIP_WEB:-1}"
 
 usage() {
 	cat <<'EOF'
 用法: bash deploy/deploy-newapi.sh [镜像 tag]
 
-默认会拉取 origin/main、在当前服务器构建前端与 New API、替换容器并验活。
+默认会拉取 origin/main、校验预装前端产物、只构建 Go、替换容器并验活。
+前端必须先在 Codex-vps 构建并用 deploy/install-web-dist.sh 安装。
 未指定 tag 时自动使用 deploy-<当前提交短 SHA>。
 
 常用示例:
   bash deploy/deploy-newapi.sh
   PULL=0 bash deploy/deploy-newapi.sh test-tag
-  SKIP_WEB=1 bash deploy/deploy-newapi.sh emergency-tag
+  SKIP_WEB=1 bash deploy/deploy-newapi.sh release-tag
   PRUNE=1 bash deploy/deploy-newapi.sh
 EOF
 }
@@ -127,10 +130,10 @@ if [[ "$PULL" == 1 && "${XJU_DEPLOY_AFTER_PULL:-0}" != 1 ]]; then
 	exec env XJU_DEPLOY_AFTER_PULL=1 PULL="$PULL" ROLLBACK="$ROLLBACK" \
 		PRUNE="$PRUNE" BRANCH="$BRANCH" HEALTH_RETRIES="$HEALTH_RETRIES" \
 		HEALTH_INTERVAL="$HEALTH_INTERVAL" HEALTH_URL="$HEALTH_URL" \
-		SKIP_WEB="${SKIP_WEB:-0}" bash "$REPO_ROOT/deploy/deploy-newapi.sh" "$@"
+		SKIP_WEB="$SKIP_WEB" bash "$REPO_ROOT/deploy/deploy-newapi.sh" "$@"
 fi
 
-if [[ "${SKIP_WEB:-0}" != 1 ]]; then
+if [[ "$SKIP_WEB" != 1 ]]; then
 	require_command bun
 fi
 
@@ -150,7 +153,7 @@ if [[ -n "$PREVIOUS_IMAGE" ]]; then
 	echo "==> 当前镜像: $PREVIOUS_IMAGE"
 fi
 
-SKIP_WEB="${SKIP_WEB:-0}" bash "$REPO_ROOT/deploy/build-newapi.sh" "$TAG"
+SKIP_WEB="$SKIP_WEB" bash "$REPO_ROOT/deploy/build-newapi.sh" "$TAG"
 
 echo "==> 替换 new-api 容器"
 if ! IMAGE="$IMAGE" bash "$REPO_ROOT/deploy/run-newapi.sh"; then

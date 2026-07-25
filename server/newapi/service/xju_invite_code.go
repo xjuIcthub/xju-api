@@ -1,51 +1,64 @@
 package service
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+
+	"gorm.io/gorm"
 )
 
-// xju-api:new — 邀请码注册消费收口(REFACTOR-PLAN §5.2)。
-//
-// 注册请求提交的 aff_code 是双语义字段:上游 new-api 只把它当可选的推荐人归因
-// (查不到就丢弃);xju-api 在 InviteCodeRequired 开启时把同一字段再当一次性
-// 邀请码,注册必须原子消费。本函数是这条横切逻辑的唯一入口,controller 的
-// Register 只留「调用 + defer release + 成功后 commit」。
-//
-// 返回的 release / commit 二选一、恰好其一生效(单 goroutine 使用,不做锁):
-//
-//	release — 注册失败时回滚消费,把码放回池子。幂等;commit 之后调用是 no-op,
-//	          已归属的码绝不会被复活(防"永久占用"的反向风险)。
-//	commit  — 注册成功后登记最终 user id,并使 release 永久失效。
-//
-// 开关关闭时三个返回值恒为 (no-op, no-op, nil),邀请码表完全不被触碰。
-// 并发一码一用由 model.ConsumeInviteCode 的状态 CAS 保证;本层只保证调用协议,
-// 最大风险(消费后未回滚 = 邀请码泄漏)由 defer release 兜底,回滚失败会记 SysError。
-func ConsumeInviteCodeForRegistration(affCode string) (release func(), commit func(userID int), err error) {
+var ErrRegistrationInviteInvalid = errors.New("registration invite code is required or invalid")
+
+// RegistrationInvite is the normalized meaning of the registration aff_code.
+// A personal code identifies a reusable inviter. An admin code is single-use
+// and must be consumed in the same transaction that creates the account.
+type RegistrationInvite struct {
+	InviterID int
+	AdminCode string
+}
+
+// ResolveRegistrationInviteWithTx applies the same invite-only rules to every
+// registration entry point. When invite-only registration is disabled, valid
+// personal codes are still attributed, while unknown/admin codes are ignored.
+func ResolveRegistrationInviteWithTx(tx *gorm.DB, affCode string) (RegistrationInvite, error) {
+	affCode = strings.TrimSpace(affCode)
+	if affCode != "" {
+		var inviter model.User
+		err := tx.Select("id").Where("aff_code = ?", affCode).First(&inviter).Error
+		switch {
+		case err == nil:
+			return RegistrationInvite{InviterID: inviter.Id}, nil
+		case !errors.Is(err, gorm.ErrRecordNotFound):
+			return RegistrationInvite{}, err
+		}
+	}
+
 	if !common.InviteCodeRequired {
-		return func() {}, func(int) {}, nil
+		return RegistrationInvite{}, nil
 	}
-	if err := model.ConsumeInviteCode(affCode, 0); err != nil {
-		return nil, nil, err
+	if affCode == "" {
+		return RegistrationInvite{}, ErrRegistrationInviteInvalid
 	}
-	settled := false
-	release = func() {
-		if settled {
-			return
-		}
-		settled = true
-		if err := model.ReleaseInviteCode(affCode); err != nil {
-			common.SysError("invite code release failed, code may stay consumed: " + err.Error())
-		}
+	return RegistrationInvite{AdminCode: affCode}, nil
+}
+
+// ConsumeRegistrationInviteWithTx binds a single-use admin code to the new
+// user. Personal referral codes require no write and remain reusable.
+func ConsumeRegistrationInviteWithTx(tx *gorm.DB, invite RegistrationInvite, userID int) error {
+	if invite.AdminCode == "" {
+		return nil
 	}
-	commit = func(userID int) {
-		if settled {
-			return
-		}
-		settled = true
-		if err := model.SetInviteCodeUser(affCode, userID); err != nil {
-			common.SysError("invite code commit failed to record user id: " + err.Error())
-		}
+	if userID <= 0 {
+		return errors.New("new user id is required before consuming invite code")
 	}
-	return release, commit, nil
+	if err := model.ConsumeInviteCodeWithTx(tx, invite.AdminCode, userID); err != nil {
+		if errors.Is(err, model.ErrInviteCodeUnavailable) {
+			return ErrRegistrationInviteInvalid
+		}
+		return err
+	}
+	return nil
 }

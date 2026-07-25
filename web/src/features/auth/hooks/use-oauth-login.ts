@@ -40,7 +40,7 @@ type LogoutRequestConfig = AxiosRequestConfig & {
 /**
  * Hook for managing OAuth login
  */
-export function useOAuthLogin(status: SystemStatus | null) {
+export function useOAuthLogin(status: SystemStatus | null, affCode = '') {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [githubButtonText, setGithubButtonText] = useState('')
@@ -61,14 +61,14 @@ export function useOAuthLogin(status: SystemStatus | null) {
   const resetSession = async () => {
     try {
       auth.reset()
-    } catch (_error) {
+    } catch {
       // ignore store reset errors
     }
     try {
       await api.get('/api/user/logout', {
         skipErrorHandler: true,
       } as LogoutRequestConfig)
-    } catch (_error) {
+    } catch {
       // ignore logout errors
     }
   }
@@ -95,7 +95,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
 
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState(affCode)
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         if (githubTimeoutRef.current) {
@@ -109,7 +109,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
 
       const url = buildGitHubOAuthUrl(status.github_client_id, state)
       window.open(url, '_self')
-    } catch (_error) {
+    } catch {
       toast.error(t('Failed to start GitHub login'))
       if (githubTimeoutRef.current) {
         clearTimeout(githubTimeoutRef.current)
@@ -126,7 +126,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState(affCode)
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -134,7 +134,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
 
       const url = buildDiscordOAuthUrl(status.discord_client_id, state)
       window.open(url, '_self')
-    } catch (_error) {
+    } catch {
       toast.error(t('Failed to start Discord login'))
     } finally {
       setIsLoading(false)
@@ -147,7 +147,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState(affCode)
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -159,7 +159,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
         state
       )
       window.open(url, '_self')
-    } catch (_error) {
+    } catch {
       toast.error(t('Failed to start OIDC login'))
     } finally {
       setIsLoading(false)
@@ -172,7 +172,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState(affCode)
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -180,7 +180,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
 
       const url = buildLinuxDOOAuthUrl(status.linuxdo_client_id, state)
       window.open(url, '_self')
-    } catch (_error) {
+    } catch {
       toast.error(t('Failed to start LinuxDO login'))
     } finally {
       setIsLoading(false)
@@ -197,7 +197,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState(affCode)
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -214,7 +214,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
       }
 
       window.open(url.toString(), '_self')
-    } catch (_error) {
+    } catch {
       toast.error(
         t('Failed to start {{provider}} login', { provider: provider.name })
       )

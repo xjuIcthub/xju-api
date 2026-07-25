@@ -16,19 +16,76 @@
 
 > ⚠️ new-api 前端已做换肤 + 裁剪 + 功能增强,**不能 `docker pull` 上游镜像**(会丢定制),必须**自建镜像** `winbeau/xju-newapi:<tag>`。
 
+### New API 标准发布链路（前端只在 Codex-vps 构建）
+
+Default 付费池**首次上线**还有一次性数据步骤，必须先完整执行
+[default-paid-pool.md](./default-paid-pool.md)：停止旧版 new-api 后先 dry-run，再运行
+`scripts/reset-default-balances.sh --apply /opt/new-api/data/one-api.db`；只有脚本成功、
+备份与 SHA-256 已记录后才能启动新镜像。不能先启新版本再清零。脚本会同时把在线
+支付总开关写为关闭，支付渠道和法币比例未确定前不得开启。
+
+先在 Codex-vps 的干净、已提交工作树中构建并打包。打包脚本会重新执行
+`bun run typecheck` 与 `bun run build`，把当前完整 Git SHA 和静态文件树哈希写入
+manifest，并生成 SHA-256 sidecar。应先 commit + push，保证 tri 能取得完全相同的提交：
+
 ```bash
-# new-api: 仓库在 /home/winbeau/opt/xju-api;数据在宿主 volume,换镜像不丢。
-# 总入口会 fast-forward origin/main,跑护栏,在 tri 构建前端 + Go 镜像、
-# 换容器、清理 Docker,再检查本地/公网 API 与 xju-provision;新版失败时尝试回滚。
+cd /Users/jacksonhuang/project/xju-api
+git status --short
+./scripts/check-guardrails.sh
+./scripts/package-web-dist.sh /private/tmp/xju-web-artifacts
+
+# 取脚本刚输出的两个绝对路径；以下文件名仅作示例。
+rsync -a \
+  /private/tmp/xju-web-artifacts/xju-web-dist-<sha>-<timestamp>.tar.gz \
+  /private/tmp/xju-web-artifacts/xju-web-dist-<sha>-<timestamp>.tar.gz.sha256 \
+  claude-tri:/home/winbeau/opt/xju-artifacts/
+```
+
+再到 Codex-tri 先更新到**同一个提交**、安装发布物，最后只编 Go。安装器会校验
+SHA-256、拒绝路径穿越/链接/超大归档、核对 manifest 与当前 `HEAD`，并把旧 bundle
+保留为 `server/newapi/prebuilt/current.previous.<timestamp>`：
+
+```bash
 cd /home/winbeau/opt/xju-api
-bash deploy/deploy.sh
+
+# 必须在 main；空输出表示 detached HEAD，此时先停下核对，不要强制 reset。
+test "$(git branch --show-current)" = main
+git status --short --untracked-files=no
+git pull --ff-only origin main
+
+artifact=/home/winbeau/opt/xju-artifacts/xju-web-dist-<sha>-<timestamp>.tar.gz
+bash deploy/install-web-dist.sh "$artifact" "$artifact.sha256"
+
+# 已在上一步更新代码，因此显式 PULL=0；SKIP_WEB=1 也是 tri 默认值。
+PULL=0 SKIP_WEB=1 bash deploy/deploy.sh release-<sha>
+```
+
+`deploy/build-newapi.sh` 会再次检查 `prebuilt/current/dist/index.html`、静态资源、
+manifest 提交号、dirty 标记、文件树哈希及安装 journal；安装和构建共用互斥锁。
+任一不匹配都会在 Docker 构建和容器替换前停止。
+不要在 tri 使用 `SKIP_WEB=0`，它会违反两机分工并可能因内存不足 OOM。
+新镜像同时写入后端提交、前端提交和发布物 SHA 标签，可在替换容器前检查：
+
+```bash
+docker image inspect winbeau/xju-newapi:<tag> --format '{{json .Config.Labels}}'
+```
+
+若 tri 当前处于 detached HEAD，先只读确认 `git status --short --untracked-files=no`
+没有 tracked 改动，再显式 `git switch main`；未跟踪的旧 `new-api/prebuilt/` 是历史构建
+产物，不属于新输入路径，切换前不要自动删除。新版本稳定后再单独归档或清理。
+
+```bash
+# new-api:仓库在 /home/winbeau/opt/xju-api;数据在宿主 volume,换镜像不丢。
+# 在已按上文安装匹配前端发布物后,总入口跑护栏、只构建 Go、换容器、
+# 清理 Docker,再检查本地/公网 API 与 xju-provision;新版失败时尝试回滚。
+cd /home/winbeau/opt/xju-api
+PULL=0 SKIP_WEB=1 bash deploy/deploy.sh
 
 # 指定镜像 tag:
-bash deploy/deploy.sh announcements-20260724
+PULL=0 SKIP_WEB=1 bash deploy/deploy.sh announcements-20260724
 
-# 已手工 git pull 时跳过拉取;SKIP_WEB=1 仅作低资源/应急通道:
-PULL=0 bash deploy/deploy.sh
-SKIP_WEB=1 bash deploy/deploy.sh emergency-tag
+# deploy.sh 默认 SKIP_WEB=1；若代码在安装发布物后未再变化,也可省略显式值:
+PULL=0 bash deploy/deploy.sh release-tag
 
 # CLIProxyAPI（自建镜像，commit 与镜像一一对应；只构建 Go，不构建前端）
 cd /home/winbeau/opt/xju-api
@@ -176,9 +233,9 @@ tri 上迁移步骤:
 
 1. **备份先行**:`bash deploy/backup.sh`。
 2. **更新仓库**:`cd /home/winbeau/opt/xju-api && git pull --ff-only origin main`(git 自动应用 rename;或干脆删掉重 clone——仓库无状态,数据都在 `/opt` 宿主卷)。
-3. **prebuilt 新路径**:旧 `new-api/prebuilt/{default-dist,classic-dist}` 作废删除;tri 完整构建会自动生成 `server/newapi/prebuilt/dist`(单产物)。
-4. **引用检查**:backup cron 走 `deploy/backup.sh` 相对仓库路径未变;旧的 `docker compose -f` 命令/别名应删除,CLIProxyAPI 统一改用 `deploy/deploy-cliproxy.sh`。
-5. **完整部署**:`bash deploy/deploy.sh <tag>`(拉取、护栏、构建、换容器、清理、本地/公网验活与服务检查)。
+3. **prebuilt 新路径**:旧 `new-api/prebuilt/{default-dist,classic-dist}` 已作废;先保留到新镜像验活完成,再单独归档/清理。本机发布物经安装器落到 `server/newapi/prebuilt/current/dist`(单产物),tri 不构建前端。
+4. **引用检查**:backup cron 走 `deploy/backup.sh` 相对仓库路径未变;旧的 `docker compose -f` 命令/别名应删除,CLIProxyAPI 统一改用 `deploy/deploy-cliproxy.sh`。`deploy/docker-compose.cliproxy.yml` 只作退役静态拓扑的历史/破玻璃参考。
+5. **完整部署**:严格按本页「New API 标准发布链路」先传并安装前端发布物,再运行 `PULL=0 SKIP_WEB=1 bash deploy/deploy.sh <tag>`。
 6. **回滚**:布局回滚 = `git checkout d02c62c`(重组前最后一个 commit,旧脚本名照旧用)+ 旧镜像 tag 重跑;数据不涉及。
 
 ## 号池一键开池 host helper(#4 Phase B,一次性安装)
@@ -223,7 +280,7 @@ bash /home/winbeau/opt/xju-api/deploy/prune-docker.sh
 docker system df    # 看回收效果
 ```
 - 升级后新 tag verify 通过即可跑一次,回收被取代的旧构建。CLIProxyAPI 的一键部署默认不清理;确认稳定后显式运行 `KEEP=2 bash deploy/prune-docker.sh`。
-- CLIProxyAPI 构建默认在 claude-tri 进行;镜像 tag 为 `deploy-<提交SHA>`。重复构建后可运行 `bash deploy/prune-docker.sh` 回收旧镜像与 build cache。
+- 前端只在 Codex-vps 构建;tri 对 New API 和 CLIProxyAPI 都只做 Go-only 镜像构建。CLIProxyAPI 镜像 tag 为 `deploy-<提交SHA>`;重复构建后可运行 `bash deploy/prune-docker.sh` 回收旧镜像与 build cache。
 - `docker system df` 若因 containerd 遗留的缺失 snapshot 报错,清理脚本会记录警告并让总部署继续做 API/服务验活;按错误中的容器 ID 定位后再单独清理。
 
 ## 备份 / 恢复

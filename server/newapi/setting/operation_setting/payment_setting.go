@@ -6,6 +6,12 @@ type PaymentSetting struct {
 	AmountOptions  []int           `json:"amount_options"`
 	AmountDiscount map[int]float64 `json:"amount_discount"` // 充值金额对应的折扣，例如 100 元 0.9 表示 100 元充值享受 9 折优惠
 
+	// OnlinePaymentEnabled is the server-side master switch for every legacy
+	// external payment flow. It intentionally defaults to false: keeping old
+	// gateway credentials in the database must not make order creation or
+	// callbacks live again after a balance reset.
+	OnlinePaymentEnabled bool `json:"online_payment_enabled"`
+
 	ComplianceConfirmed    bool   `json:"compliance_confirmed"`
 	ComplianceTermsVersion string `json:"compliance_terms_version"`
 	ComplianceConfirmedAt  int64  `json:"compliance_confirmed_at"`
@@ -33,4 +39,8 @@ func GetPaymentSetting() *PaymentSetting {
 func IsPaymentComplianceConfirmed() bool {
 	return paymentSetting.ComplianceConfirmed &&
 		paymentSetting.ComplianceTermsVersion == CurrentComplianceTermsVersion
+}
+
+func IsOnlinePaymentEnabled() bool {
+	return paymentSetting.OnlinePaymentEnabled
 }
