@@ -121,10 +121,22 @@ write_image_env() {
 	mv "$temp" "$IMAGE_ENV_FILE"
 }
 
+registry_json() {
+	if [[ -r "$POOL_REGISTRY_FILE" ]]; then
+		cat "$POOL_REGISTRY_FILE"
+		return
+	fi
+	if docker inspect new-api --format '{{.State.Running}}' 2>/dev/null | grep -Fx true >/dev/null; then
+		docker exec new-api cat /data/xju-pools.json
+		return
+	fi
+	echo "dynamic pool registry is not readable: $POOL_REGISTRY_FILE" >&2
+	return 1
+}
+
 registry_entry() {
 	local id="$1" entry
-	[[ -f "$POOL_REGISTRY_FILE" ]] || return 1
-	entry="$(jq -c --arg id "$id" '.[] | select(.id == $id)' "$POOL_REGISTRY_FILE" | head -n 1)"
+	entry="$(registry_json | jq -c --arg id "$id" '.[] | select(.id == $id)' | head -n 1)"
 	[[ -n "$entry" ]] || return 1
 	printf '%s\n' "$entry"
 }

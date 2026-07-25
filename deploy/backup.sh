@@ -18,7 +18,7 @@ mkdir -p "$DEST"
 	echo "missing New API database: $NEWAPI_DATA/one-api.db" >&2
 	exit 1
 }
-[[ -f "$NEWAPI_DATA/xju-pools.json" ]] || {
+[[ -e "$NEWAPI_DATA/xju-pools.json" ]] || {
 	echo "missing dynamic pool registry: $NEWAPI_DATA/xju-pools.json" >&2
 	exit 1
 }
@@ -38,7 +38,17 @@ else
 fi
 
 # 2) 动态池 registry 与运行数据。日志不进入备份。
-cp -a "$NEWAPI_DATA/xju-pools.json" "$DEST/"
+if [[ -r "$NEWAPI_DATA/xju-pools.json" ]]; then
+	cp -a "$NEWAPI_DATA/xju-pools.json" "$DEST/"
+else
+	docker inspect new-api --format '{{.State.Running}}' 2>/dev/null | grep -Fx true >/dev/null || {
+		echo "dynamic pool registry is unreadable and new-api is not running" >&2
+		exit 1
+	}
+	docker exec new-api cat /data/xju-pools.json >"$DEST/xju-pools.json"
+	chmod 600 "$DEST/xju-pools.json"
+fi
+jq -e 'type == "array"' "$DEST/xju-pools.json" >/dev/null
 mapfile -d '' pool_paths < <(
 	find "$CLIPROXY_DIR" -mindepth 1 -maxdepth 1 \
 		\( -name 'config.*.yaml' -o -name '.pool-mgmt-*.env' -o -name 'auths-*' -o -name '.cliproxy-image.env' \) \

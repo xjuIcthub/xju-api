@@ -48,7 +48,8 @@ PULL=0 bash deploy/deploy-cliproxy.sh \
 ```
 
 CLIProxyAPI 镜像固定为 `winbeau/cli-proxy-api:deploy-<当前 main 的 7 位提交短 SHA>`，
-脚本拒绝 tag/commit 不一致的构建。它只管理**当前正在运行**的
+脚本拒绝 tag/commit 不一致的构建。动态 registry 若因宿主权限不可读，脚本会通过运行中的
+`new-api` 容器读取 `/data/xju-pools.json`，因此 `--dry-run` 不需要修改数据库文件权限。它只管理**当前正在运行**的
 `cli-proxy-api-<id>`，不会复活故意停用或不存在的 `k12-pool`。升级顺序为一个非
 `main` 池作 canary、其余池、`main` 最后；私有池的 256 MiB/0.75 CPU/PID/日志限制
 由 `deploy/cliproxy-pool-runtime.sh` 统一保留。
