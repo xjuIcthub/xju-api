@@ -7,9 +7,10 @@ usage() {
 	cat <<'EOF' >&2
 usage: scripts/package-web-dist.sh [output-directory]
 
-By default this runs `bun run typecheck` and `bun run build` in web/, then
-writes a versioned .tar.gz and matching .sha256 file. The tracked worktree and
-web/ source must be clean.
+By default this runs `bun run build` in web/ first so TanStack Router generates
+the ignored routeTree.gen.ts, then runs `bun run typecheck`, and finally writes
+a versioned .tar.gz with a matching .sha256 file. The tracked worktree and web/
+source must be clean.
 
 Test/emergency overrides:
   SKIP_BUILD=1  package the existing web/dist without rebuilding
@@ -102,10 +103,10 @@ require_clean_source
 if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
 	require_command bun
 	echo "==> building frontend on Codex-vps"
+	(cd "$REPO_ROOT/web" && bun run build)
 	if [[ "${SKIP_TYPECHECK:-0}" != 1 ]]; then
 		(cd "$REPO_ROOT/web" && bun run typecheck)
 	fi
-	(cd "$REPO_ROOT/web" && bun run build)
 else
 	echo "==> SKIP_BUILD=1, packaging existing $DIST_DIR"
 fi
