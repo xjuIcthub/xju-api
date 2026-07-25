@@ -41,15 +41,18 @@ fi
 
 validate_dist() {
 	local dist_dir="$1"
-	local allow_dirty=()
 	if [[ "${ALLOW_DIRTY_WEB_ARTIFACT:-0}" == 1 ]]; then
-		allow_dirty+=(--allow-dirty)
+		python3 "$REPO_ROOT/scripts/web-artifact-manifest.py" validate \
+			--dist "$dist_dir" \
+			--manifest "$PREBUILT/manifest.json" \
+			--expected-commit "$(git -C "$REPO_ROOT" rev-parse --verify HEAD)" \
+			--allow-dirty
+		return
 	fi
 	python3 "$REPO_ROOT/scripts/web-artifact-manifest.py" validate \
 		--dist "$dist_dir" \
 		--manifest "$PREBUILT/manifest.json" \
-		--expected-commit "$(git -C "$REPO_ROOT" rev-parse --verify HEAD)" \
-		"${allow_dirty[@]}"
+		--expected-commit "$(git -C "$REPO_ROOT" rev-parse --verify HEAD)"
 }
 
 if [[ "${SKIP_WEB:-0}" != 1 ]]; then
