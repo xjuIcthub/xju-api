@@ -51,16 +51,19 @@ import { copyToClipboard } from '@/lib/copy-to-clipboard'
 
 import { updateApiKeyStatus } from '../api'
 import { API_KEY_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import type { ApiKeyProvider } from '../lib'
 import { getPublicServerAddress } from '../lib/server-address'
 import { apiKeySchema } from '../types'
 import { useApiKeys } from './api-keys-provider'
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
+  provider?: ApiKeyProvider
 }
 
 export function DataTableRowActions<TData>({
   row,
+  provider,
 }: DataTableRowActionsProps<TData>) {
   const { t } = useTranslation()
   const apiKey = apiKeySchema.parse(row.original)
@@ -77,6 +80,8 @@ export function DataTableRowActions<TData>({
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
   const resolvedRealKey = resolvedKeys[apiKey.id]
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
+  const isCodexPool = provider === 'codex'
+  const isClaudePool = provider === 'claude'
 
   const toggleLabel = isEnabled ? t('Disable') : t('Enable')
 
@@ -131,6 +136,7 @@ export function DataTableRowActions<TData>({
   }
 
   const openCodexConfig = async () => {
+    if (!isCodexPool) return
     const realKey = await resolveRealKey(apiKey.id)
     if (!realKey) return
     setResolvedKey(realKey)
@@ -147,6 +153,7 @@ export function DataTableRowActions<TData>({
   }
 
   const openClaudeConfig = async () => {
+    if (!isClaudePool) return
     const realKey = await resolveRealKey(apiKey.id)
     if (!realKey) return
     setResolvedKey(realKey)
@@ -165,6 +172,7 @@ export function DataTableRowActions<TData>({
               variant='ghost'
               size='icon-sm'
               onClick={openCodexConfig}
+              disabled={isRealKeyLoading || !isCodexPool}
               aria-label={t('Codex Config')}
             />
           }
@@ -181,7 +189,7 @@ export function DataTableRowActions<TData>({
               variant='ghost'
               size='icon-sm'
               onClick={openClaudeConfig}
-              disabled={isRealKeyLoading}
+              disabled={isRealKeyLoading || !isClaudePool}
               aria-label={t('Claude Config')}
             />
           }
@@ -300,13 +308,13 @@ export function DataTableRowActions<TData>({
             <ArrowRightLeft size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={openCodexConfig}>
+        <DropdownMenuItem onClick={openCodexConfig} disabled={!isCodexPool}>
           {t('Codex Config')}
           <DropdownMenuShortcut>
             <IconCodex className='size-4' />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={openClaudeConfig}>
+        <DropdownMenuItem onClick={openClaudeConfig} disabled={!isClaudePool}>
           {t('Claude Config')}
           <DropdownMenuShortcut>
             <Anthropic className='size-4' />

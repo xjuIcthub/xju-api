@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'bun:test'
 
-import { buildApiKeyGroupOptions } from './api-key-groups'
+import {
+  buildApiKeyGroupOptions,
+  getApiKeyGroupProvider,
+} from './api-key-groups'
 
 describe('API key group options', () => {
   test('shows public pool labels and provider identities instead of raw keys', () => {
@@ -52,5 +55,19 @@ describe('API key group options', () => {
         isPrivate: false,
       },
     ])
+  })
+
+  test('resolves the provider used by API key integration actions', () => {
+    const options = buildApiKeyGroupOptions(
+      {
+        default: { desc: 'Default', ratio: 1, provider: 'codex' },
+        claude: { desc: 'Claude', ratio: 1, provider: 'claude' },
+      },
+      ''
+    )
+
+    expect(getApiKeyGroupProvider(options, 'default')).toBe('codex')
+    expect(getApiKeyGroupProvider(options, 'claude')).toBe('claude')
+    expect(getApiKeyGroupProvider(options, 'missing')).toBe(undefined)
   })
 })

@@ -32,6 +32,8 @@ export { getPublicServerAddress } from './server-address'
 
 export {
   buildApiKeyGroupOptions,
+  getApiKeyGroupProvider,
   getPreferredApiKeyGroup,
   type ApiKeyGroupOption,
+  type ApiKeyProvider,
 } from './api-key-groups'

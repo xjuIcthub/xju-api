@@ -60,13 +60,17 @@ export function DashboardProviderSelect({
       }
     >
       <SelectTrigger
-        className='h-8 min-w-24'
+        className='h-8 w-24 min-w-24'
         aria-label={t('Provider')}
         title={t('Provider')}
       >
         <SelectValue />
       </SelectTrigger>
-      <SelectContent align='end'>
+      <SelectContent
+        align='end'
+        alignItemWithTrigger={false}
+        className='w-24 min-w-24'
+      >
         {DASHBOARD_PROVIDER_OPTIONS.map((provider) => (
           <SelectItem key={provider} value={provider}>
             {t(DASHBOARD_PROVIDER_LABELS[provider])}

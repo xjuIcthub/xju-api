@@ -21,15 +21,15 @@ import { describe, expect, test } from 'bun:test'
 import { buildCCSwitchURL, buildClaudeConfig } from './cc-switch-config'
 
 describe('XJU Claude defaults', () => {
-  test('maps Sol, Terra and Luna to the expected Claude roles', () => {
+  test('uses Claude-family models for each Claude Code role', () => {
     expect(buildClaudeConfig('sk-test', {})).toEqual({
       env: {
         ANTHROPIC_BASE_URL: 'https://api.selab.top',
         ANTHROPIC_AUTH_TOKEN: 'sk-test',
-        ANTHROPIC_MODEL: 'gpt-5.6-sol',
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5.6-luna',
-        ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5.6-terra',
-        ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5.6-sol',
+        ANTHROPIC_MODEL: 'claude-opus-5',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-4-5-20251001',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-5',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5',
       },
     })
   })
@@ -40,9 +40,9 @@ describe('XJU Claude defaults', () => {
     )
     expect(url.protocol).toBe('ccswitch:')
     expect(url.searchParams.get('endpoint')).toBe('https://api.selab.top')
-    expect(url.searchParams.get('model')).toBe('gpt-5.6-sol')
-    expect(url.searchParams.get('haikuModel')).toBe('gpt-5.6-luna')
-    expect(url.searchParams.get('sonnetModel')).toBe('gpt-5.6-terra')
-    expect(url.searchParams.get('opusModel')).toBe('gpt-5.6-sol')
+    expect(url.searchParams.get('model')).toBe('claude-opus-5')
+    expect(url.searchParams.get('haikuModel')).toBe('claude-haiku-4-5-20251001')
+    expect(url.searchParams.get('sonnetModel')).toBe('claude-sonnet-5')
+    expect(url.searchParams.get('opusModel')).toBe('claude-opus-5')
   })
 })

@@ -28,8 +28,35 @@ export function buildClaudeSettingsJson(
   tokenKey: string
 ): string {
   const endpoint = (baseUrl || PUBLIC_API_ENDPOINT).replace(/\/+$/, '')
+  const config = buildClaudeConfig(normalizeToken(tokenKey), {}, endpoint)
   return JSON.stringify(
-    buildClaudeConfig(normalizeToken(tokenKey), {}, endpoint),
+    {
+      enableWorkflows: true,
+      env: {
+        ANTHROPIC_AUTH_TOKEN: config.env.ANTHROPIC_AUTH_TOKEN,
+        ANTHROPIC_BASE_URL: config.env.ANTHROPIC_BASE_URL,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: config.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: config.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+        ANTHROPIC_DEFAULT_SONNET_MODEL:
+          config.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+        ANTHROPIC_MODEL: config.env.ANTHROPIC_MODEL,
+        CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: '1',
+      },
+      permissions: {
+        allow: [
+          'Skill(update-config)',
+          'Bash(command -v claude)',
+          'Bash(claude --version)',
+          'Bash(env)',
+        ],
+        defaultMode: 'bypassPermissions',
+      },
+      skipAutoPermissionPrompt: true,
+      skipWorkflowUsageWarning: true,
+      tui: 'default',
+      ultracode: true,
+      skipDangerousModePermissionPrompt: true,
+    },
     null,
     2
   )

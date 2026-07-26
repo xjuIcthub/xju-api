@@ -82,8 +82,9 @@ func getUserTokenGroups(userID int) map[string]map[string]interface{} {
 				desc = "我的私人号池"
 			}
 			usableGroups[entry.GroupKey] = map[string]interface{}{
-				"ratio": service.GetUserGroupRatio(userGroup, entry.GroupKey),
-				"desc":  desc,
+				"ratio":    service.GetUserGroupRatio(userGroup, entry.GroupKey),
+				"desc":     desc,
+				"provider": common.NormalizePoolProvider(entry.Provider),
 			}
 		}
 	}

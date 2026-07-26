@@ -321,7 +321,8 @@ export function CCSwitchDialog(props: Props) {
         {app === 'claude' && (
           <section className='rounded-lg border'>
             <p className='text-muted-foreground border-b px-4 py-3 text-xs'>
-              Opus → gpt-5.6-sol · Sonnet → gpt-5.6-terra · Haiku → gpt-5.6-luna
+              Opus → claude-opus-5 · Sonnet → claude-sonnet-5 · Haiku →
+              claude-haiku-4-5
             </p>
             <Button
               type='button'

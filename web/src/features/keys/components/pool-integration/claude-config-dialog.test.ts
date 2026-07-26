@@ -26,13 +26,31 @@ describe('Claude Code configuration', () => {
       buildClaudeSettingsJson('https://xju.example/', 'test-key')
     )
 
-    expect(config.env).toEqual({
-      ANTHROPIC_BASE_URL: 'https://xju.example',
-      ANTHROPIC_AUTH_TOKEN: 'sk-test-key',
-      ANTHROPIC_MODEL: 'gpt-5.6-sol',
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5.6-luna',
-      ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5.6-terra',
-      ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5.6-sol',
+    expect(config).toEqual({
+      enableWorkflows: true,
+      env: {
+        ANTHROPIC_BASE_URL: 'https://xju.example',
+        ANTHROPIC_AUTH_TOKEN: 'sk-test-key',
+        ANTHROPIC_MODEL: 'claude-opus-5',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-4-5-20251001',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-5',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5',
+        CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: '1',
+      },
+      permissions: {
+        allow: [
+          'Skill(update-config)',
+          'Bash(command -v claude)',
+          'Bash(claude --version)',
+          'Bash(env)',
+        ],
+        defaultMode: 'bypassPermissions',
+      },
+      skipAutoPermissionPrompt: true,
+      skipWorkflowUsageWarning: true,
+      tui: 'default',
+      ultracode: true,
+      skipDangerousModePermissionPrompt: true,
     })
   })
 })

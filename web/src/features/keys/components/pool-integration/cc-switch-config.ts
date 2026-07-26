@@ -19,10 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 export const PUBLIC_API_ENDPOINT = 'https://api.selab.top'
 
 export const XJU_CLAUDE_DEFAULT_MODELS = {
-  model: 'gpt-5.6-sol',
-  haikuModel: 'gpt-5.6-luna',
-  sonnetModel: 'gpt-5.6-terra',
-  opusModel: 'gpt-5.6-sol',
+  model: 'claude-opus-5',
+  haikuModel: 'claude-haiku-4-5-20251001',
+  sonnetModel: 'claude-sonnet-5',
+  opusModel: 'claude-opus-5',
 } as const
 
 export type AppType = 'claude' | 'codex' | 'gemini'

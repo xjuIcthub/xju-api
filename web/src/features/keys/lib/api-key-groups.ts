@@ -16,12 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+export type ApiKeyProvider = 'codex' | 'claude'
+
 export type ApiKeyGroupOption = {
   value: string
   label: string
   desc?: string
   ratio?: number | string
-  provider?: 'codex' | 'claude'
+  provider?: ApiKeyProvider
   isPrivate?: boolean
 }
 
@@ -30,14 +32,21 @@ type UserGroupMap = Record<
   {
     desc: string
     ratio: number | string
-    provider?: 'codex' | 'claude'
+    provider?: ApiKeyProvider
   }
 >
 
-function getProviderLabel(provider?: 'codex' | 'claude'): string {
+function getProviderLabel(provider?: ApiKeyProvider): string {
   if (provider === 'claude') return 'Claude'
   if (provider === 'codex') return 'Codex / OpenAI'
   return ''
+}
+
+export function getApiKeyGroupProvider(
+  options: ApiKeyGroupOption[],
+  group: string
+): ApiKeyProvider | undefined {
+  return options.find((option) => option.value === group)?.provider
 }
 
 export function buildApiKeyGroupOptions(

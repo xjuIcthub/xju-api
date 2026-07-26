@@ -34,7 +34,8 @@ func TestGetUserGroupsAddsOnlyOwnedPrivateGroup(t *testing.T) {
 		Kind: common.PoolKindAdmin, GroupKey: "claude-team",
 	}))
 	require.NoError(t, common.AddPoolToRegistry(common.PoolEntry{
-		ID: "1", Label: "Alice Pool", MgmtURL: "http://pool-1:8319", MgmtSecret: "secret", ChannelID: 123,
+		ID: "1", Label: "Alice Pool", Provider: common.PoolProviderCodex,
+		MgmtURL: "http://pool-1:8319", MgmtSecret: "secret", ChannelID: 123,
 		OwnerUserID: 42, Kind: common.PoolKindPrivate,
 	}))
 
@@ -80,6 +81,7 @@ func TestGetUserGroupsAddsOnlyOwnedPrivateGroup(t *testing.T) {
 	privateGroup, ok := response.Data[common.PrivatePoolGroupKey(42)]
 	require.True(t, ok)
 	assert.Equal(t, "Alice Pool", privateGroup["desc"])
+	assert.Equal(t, common.PoolProviderCodex, privateGroup["provider"])
 	codexGroup, ok := response.Data["codex-team"]
 	require.True(t, ok)
 	assert.Equal(t, "Codex Team", codexGroup["desc"])

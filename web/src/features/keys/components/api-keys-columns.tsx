@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 
 import { API_KEY_STATUSES } from '../constants'
 import { useApiKeyGroups } from '../hooks/use-api-key-groups'
+import { getApiKeyGroupProvider } from '../lib'
 import type { ApiKey } from '../types'
 import { ApiKeyGroupCell } from './api-key-group-cell'
 import { ApiKeyTimestampCell } from './api-key-timestamp-cell'
@@ -224,7 +225,13 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       header: () => <div className='text-center'>{t('Actions')}</div>,
       cell: ({ row }) => (
         <div className='flex justify-center'>
-          <DataTableRowActions row={row} />
+          <DataTableRowActions
+            row={row}
+            provider={getApiKeyGroupProvider(
+              groupOptions,
+              row.original.group || ''
+            )}
+          />
         </div>
       ),
       size: 96,
