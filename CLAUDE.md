@@ -7,15 +7,12 @@
 三层 AI API 代理平台,用「日卡 / 三天卡 / 周卡」时间卡形式把上游 AI 号池打包分发给下游用户。
 `server/newapi`(L1 发卡/统计) → `server/cliproxy`(L2/L3 号池)。详见 PLAN.md。
 
-## 两机分工(硬约束)
+## 开发与部署分工(当前口径)
 
-- **本机 = claude-vps**:**只写代码、不部署**。在这里做的事:
-  1. 前端换肤+裁剪(改顶层 `web/`,见 PLAN.md §5)
-  2. 前端**构建**(`bun run build`)——**必须在本机构建**,因为 claude-tri 内存极紧(空闲仅 ~126Mi),在它上面 build 会 OOM
-  3. 写 `deploy/`(Caddyfile / docker 模板 / 配置样板)与 `scripts/`(发卡 glue)
-  4. 按需对 `server/cliproxy/` 做删减/升级适配
-  5. `git commit`(winbeau 身份,已配好)+ `git push`
-- **claude-tri = 70.39.193.15:48687(user winbeau)**:**只 clone + 部署**。`git clone` 本仓 → 照 docs/runbook.md 起 Caddy + CLIProxyAPI + new-api,用本机已构建好的前端产物(`SKIP_WEB=1 ./deploy/build-newapi.sh` 只编 Go),不在 tri 上跑前端构建。
+- **本机 = claude-vps**:用于写代码、运行开发测试、按需本地构建、`git commit`(winbeau 身份)+`git push`;不直接操作生产容器或生产数据。
+- **claude-tri = 70.39.193.15:48687(user winbeau)**:生产构建与部署主机,资源已可完整运行 Bun + Docker 构建。标准入口是 `bash deploy/deploy.sh`(默认 `SKIP_WEB=0`),会拉取代码、构建前端、构建 Go 镜像、换容器并验活。
+- `SKIP_WEB=1` + `deploy/install-web-dist.sh` 仍作为可选的 prebuilt 发布物路径,用于复用外部构建或紧急降载,不再是 tri 的硬性要求。
+- 生产部署、容器重建、数据库操作仍只在 claude-tri 执行。
 
 ## 已定决策(勿再动摇/重新讨论)
 
@@ -65,7 +62,7 @@
 cd web
 bun install
 bun run dev        # 本地开发服
-bun run build      # 生产构建(部署用产物,在本机构建)
+bun run build      # 本地验证构建；生产也可由 tri 的 deploy.sh 完整构建
 bun run typecheck  # tsgo -b,必须清零
 bun run lint
 bun run knip       # 扫删除后的孤儿引用
@@ -85,4 +82,4 @@ cd server/newapi && go build .   # 裸编译走 web/dist 占位 index.html
 
 ## 建议起手式
 
-新会话在本机接手时,通常从 PLAN.md §7 拆 todolist,但注意**部署动作在 claude-tri 上做**;**本机能推进的是前端换肤/裁剪、发卡脚本、`deploy/` 配置与文档**。先把这些写好、构建好、推上去,再到 claude-tri clone 部署。
+新会话在本机接手时,通常从 PLAN.md §7 拆 todolist。代码与测试在本机推进并推送；生产部署在 claude-tri 运行 `bash deploy/deploy.sh`,默认由服务器完成前端与 Go 镜像构建。

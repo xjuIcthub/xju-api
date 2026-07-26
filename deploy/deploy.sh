@@ -14,7 +14,9 @@
 #   PRUNE=0            跳过 Docker 清理(默认执行)
 #   CHECK_PUBLIC=0     跳过公网 API 检查
 #   CHECK_PROVISION=0  跳过 xju-provision 服务检查
-#   其余 SKIP_WEB / ROLLBACK / HEALTH_* 透传给 deploy-newapi.sh。
+#   SKIP_WEB=0         在服务器完整构建前端（默认）
+#   SKIP_WEB=1         校验并复用已安装的 prebuilt/current
+#   其余 ROLLBACK / HEALTH_* 透传给 deploy-newapi.sh。
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,7 +27,7 @@ CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 CHECK_PROVISION="${CHECK_PROVISION:-1}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:3000/api/status}"
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://api.selab.top/api/status}"
-SKIP_WEB="${SKIP_WEB:-1}"
+SKIP_WEB="${SKIP_WEB:-0}"
 
 usage() {
 	cat <<'EOF'
@@ -34,11 +36,12 @@ usage() {
 完整执行:
   1. fast-forward origin/main
   2. scripts/check-guardrails.sh
-  3. deploy/deploy-newapi.sh(校验预装前端 + Go + 换容器 + 健康检查/失败回滚)
+  3. deploy/deploy-newapi.sh(默认在服务器构建前端 + Go + 换容器 + 健康检查/失败回滚)
   4. deploy/prune-docker.sh
   5. 检查本地 API、公网 API、new-api 镜像与 xju-provision
 
 默认 tag: deploy-<当前提交短 SHA>
+默认 SKIP_WEB=0；只有明确使用已安装发布物时才设 SKIP_WEB=1。
 EOF
 }
 

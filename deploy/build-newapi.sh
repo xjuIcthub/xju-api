@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # deploy/build-newapi.sh — 构建定制 new-api 镜像(prebuilt 流,唯一构建路径)
 #
-# 本机流程:cd web && bun run build → 拷 dist → server/newapi/prebuilt/current/dist
-#       → docker build -f deploy/Dockerfile.newapi.prebuilt(context = server/newapi)
-# tri 流程:先用 deploy/install-web-dist.sh 安装本机产物,再以 SKIP_WEB=1 只编 Go。
+# 默认流程:在当前构建机执行 bun install/build → 拷 dist →
+#          server/newapi/prebuilt/current/dist → docker build Go 镜像。
+# 可选 prebuilt 流:先用 deploy/install-web-dist.sh 安装匹配 HEAD 的发布物，
+#                  再以 SKIP_WEB=1 跳过前端构建。
 #
 # 用法(仓库根目录):
 #   ./deploy/build-newapi.sh              # tag 默认 winbeau/xju-newapi:latest
 #   ./deploy/build-newapi.sh v0.6.0       # 指定 tag
-#   SKIP_WEB=1 ./deploy/build-newapi.sh   # 跳过前端构建,校验并复用 prebuilt/current
+#   SKIP_WEB=1 ./deploy/build-newapi.sh   # 可选：跳过前端构建,校验并复用 prebuilt/current
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -86,7 +87,7 @@ PY
 else
 	[[ -f "$PREBUILT/manifest.json" ]] || {
 		echo "SKIP_WEB=1 但 $PREBUILT/manifest.json 不存在" >&2
-		echo "先用 deploy/install-web-dist.sh 安装本机构建的前端发布物" >&2
+		echo "先用 deploy/install-web-dist.sh 安装与当前 HEAD 匹配的前端发布物" >&2
 		exit 1
 	}
 	[[ -s "$PREBUILT/artifact.sha256" ]] || {

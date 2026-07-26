@@ -4,7 +4,7 @@
 # 默认流程:
 #   1) 检查 tracked 工作区无本地修改;
 #   2) fast-forward 到 origin/main,并重新执行更新后的脚本;
-#   3) 校验本机传入的前端发布物,在服务器只构建 Go 镜像;
+#   3) 默认在服务器构建前端并构建 Go 镜像；也可校验预装发布物后只构建 Go;
 #   4) 替换 new-api 容器并检查 /api/status;
 #   5) 失败时尝试恢复部署前镜像。
 #
@@ -14,8 +14,8 @@
 #
 # 可选环境变量:
 #   PULL=0         已手工拉取代码时跳过 git fetch/merge
-#   SKIP_WEB=1     使用已安装的 prebuilt/current(默认且生产必须保持为 1)
-#   SKIP_WEB=0     仅限非 tri 环境,允许在当前机器重新构建前端
+#   SKIP_WEB=0     在当前服务器完整构建前端(默认)
+#   SKIP_WEB=1     使用已安装并与 HEAD 匹配的 prebuilt/current
 #   ROLLBACK=0     健康检查失败时不自动恢复旧镜像
 #   PRUNE=1        成功后运行 deploy/prune-docker.sh
 #   BRANCH=main    要部署的远端分支
@@ -30,19 +30,20 @@ PRUNE="${PRUNE:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/status}"
-SKIP_WEB="${SKIP_WEB:-1}"
+SKIP_WEB="${SKIP_WEB:-0}"
 
 usage() {
 	cat <<'EOF'
 用法: bash deploy/deploy-newapi.sh [镜像 tag]
 
-默认会拉取 origin/main、校验预装前端产物、只构建 Go、替换容器并验活。
-前端必须先在 Codex-vps 构建并用 deploy/install-web-dist.sh 安装。
+默认会拉取 origin/main、在服务器构建前端和 Go、替换容器并验活。
+如需复用外部构建的前端发布物，先用 deploy/install-web-dist.sh 安装并设置 SKIP_WEB=1。
 未指定 tag 时自动使用 deploy-<当前提交短 SHA>。
 
 常用示例:
   bash deploy/deploy-newapi.sh
   PULL=0 bash deploy/deploy-newapi.sh test-tag
+  SKIP_WEB=0 bash deploy/deploy-newapi.sh release-tag
   SKIP_WEB=1 bash deploy/deploy-newapi.sh release-tag
   PRUNE=1 bash deploy/deploy-newapi.sh
 EOF

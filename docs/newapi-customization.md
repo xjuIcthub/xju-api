@@ -68,27 +68,32 @@
 机制已留位(`expired_time = max(原到期, now) + 30*86400`),前端快捷按钮**未上架**(PLAN.md §9-3)。
 上架方法:在 `api-keys-mutate-drawer.tsx` 的快捷按钮行加一个 `handleAddDays(30)` 按钮 + 各语言 `"+30 Days"` i18n 键。
 
-## 构建方式(prebuilt 流,唯一路径)
+## 构建方式(服务器完整构建 + 可选 prebuilt)
 
-顶层重组后,全量 Dockerfile(容器内跑前端构建)已删除——两台机都跑不动它;
-**`deploy/build-newapi.sh`** 是唯一构建入口,走 `deploy/Dockerfile.newapi.prebuilt`:
+顶层重组后,全量多阶段 Dockerfile(容器内跑 Node 构建)已删除；
+**`deploy/build-newapi.sh`** 是唯一镜像构建入口,走 `deploy/Dockerfile.newapi.prebuilt`。
+默认由 tri 在宿主执行 Bun 构建,再用 Docker 构建 Go 镜像：
 
 ```bash
-./deploy/build-newapi.sh v0.6.0        # 本机:bun build → prebuilt/current → docker build
-./scripts/package-web-dist.sh /private/tmp/xju-web-artifacts
-SKIP_WEB=1 ./deploy/build-newapi.sh    # tri:校验已安装的 prebuilt/current,只编 Go
+bash deploy/deploy.sh                  # tri 标准入口:拉代码 → Bun build → Go 镜像 → 换容器
+./deploy/build-newapi.sh v0.6.0        # 当前机器:bun build → prebuilt/current → docker build
+
+# 可选 prebuilt 路径
+./scripts/package-web-dist.sh /tmp/xju-web-artifacts
+SKIP_WEB=1 ./deploy/build-newapi.sh    # 校验已安装的 prebuilt/current,只编 Go
 ```
 
-- 前端产物必须在本机(claude-vps)`bun run build`;tri 内存极紧,跑 rspack 会 OOM。
-- 标准传递方式是本机 `package-web-dist.sh` 生成带 commit、文件树哈希与 SHA-256 的归档,
-  tri 用 `deploy/install-web-dist.sh` 安全解包、加锁并带 journal 切换;不能手工裸拷一个
+- tri 资源已可完整运行 `bun install --frozen-lockfile` 与 `bun run build`；`deploy.sh` 默认
+  `SKIP_WEB=0`,服务器构建是生产标准路径。
+- prebuilt 模式下由 `package-web-dist.sh` 生成带 commit、文件树哈希与 SHA-256 的归档,
+  再用 `deploy/install-web-dist.sh` 安全解包、加锁并带 journal 切换；不能手工裸拷一个
   无法溯源的 `dist/`。
 - Go 二进制用 `go:embed web/dist` **编译期内嵌**前端(`server/newapi/main.go`),
   所以定制前端必须自建镜像,不能只挂载静态文件。
 - 历史耗时参考(全量 Dockerfile + BuildKit 缓存挂载时代,已删除):只改一行后端
   `go build` 从 ~40-60s 降到 ~7s;只改前端 rspack ~60-90s;整体热构建十几秒。
 
-也可以完全在本机构建镜像后送 claude-tri(二选一):
+也可以在其他构建机完整构建镜像后送 claude-tri(可选):
 
 ```bash
 docker push winbeau/xju-newapi:<tag>       # 走 registry

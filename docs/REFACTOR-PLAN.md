@@ -5,6 +5,8 @@
 
 # xju-api 重构计划(v3.1)
 
+> 历史说明：本文记录重组当时的资源条件，其中“tri 前端构建会 OOM”的限制已失效。当前生产构建口径以 `CLAUDE.md` 与 `docs/runbook.md` 为准：tri 默认运行 `SKIP_WEB=0 bash deploy/deploy.sh` 完整构建。
+
 > 目标:一个规范、统一、高内聚低耦合的 **xju-api 总体**——顶层即读得出"前端 / 服务端 / 部署 / 脚本 / 文档"五件事,而不是"两个 vendored 仓库 + 一本改造说明书"。
 > 方针(owner 已拍板,两轮指示):**就地大刀阔斧重构**——不 fork 上游、不建 vendor 分支、不用 git submodule/subtree;「上游可升级性」不再是设计目标;版权在**主 README 许可小节声明**即可;**顶层重组**:`new-api` 与 `newapi-customization` 合并、前后端尽量分离、CLIProxyAPI 移入 `server/`。
 > 硬护栏不变:绝不删除/修改 new-api / QuantumNous / router-for-me 的品牌、页脚归属、版权头、LICENSE/NOTICE、go module 路径(`github.com/QuantumNous/new-api`)。**目录搬迁不触护栏**——归属文件随目录整体走、逐字不动。

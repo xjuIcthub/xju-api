@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and package the web bundle on Codex-vps for transfer to Codex-tri.
+# Optional: build and package the web bundle for a prebuilt deployment flow.
 # The resulting archive contains dist/ plus a source manifest and SHA-256 sidecar.
 set -euo pipefail
 
@@ -102,7 +102,7 @@ detect_source_dirty
 require_clean_source
 if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
 	require_command bun
-	echo "==> building frontend on Codex-vps"
+	echo "==> building frontend for prebuilt artifact"
 	(cd "$REPO_ROOT/web" && bun run build)
 	if [[ "${SKIP_TYPECHECK:-0}" != 1 ]]; then
 		(cd "$REPO_ROOT/web" && bun run typecheck)

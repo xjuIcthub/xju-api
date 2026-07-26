@@ -53,7 +53,7 @@
 - **Default 付费池** —— 用户 `quota` 明确为 Default 共享池余额，私人池继续免余额校验和扣减；管理员用户页拆分「Default 余额 / 全部池累计用量」，并新增全站累计用量汇总。用户侧新增额度充值、邀请规则与身份门槛入口；管理员账号池下新增 Default 独立倍率页。
 - **余额身份视觉** —— 当前余额满 `$50` 显示流光香槟金名字，满 `$100` 加银皇冠，满 `$1,000` 加金皇冠；纯视觉且支持 reduced-motion。
 - **安全余额迁移** —— 新增默认 dry-run 的一次性清零工具，使用 Python SQLite backup API 生成并校验 `0600` 备份后才清除旧余额；无需生产宿主机安装 `sqlite3`，并保留总用量、邀请历史和日志。清零时显式关闭服务端在线支付总开关，旧支付凭证和 pending 回调不能把余额重新加回。
-- **前端发布物校验** —— 前端固定在 Codex-vps 构建，打包时写入 Git SHA 并生成 SHA-256；Codex-tri 安装器安全解包、核对当前提交并原子替换，生产部署默认只编 Go，杜绝旧前端或占位页混入新镜像。
+- **前端发布物校验** —— tri 现可直接完整构建前端与 Go；可选 prebuilt 模式仍会写入 Git SHA 和 SHA-256，由安装器安全解包、核对当前提交并原子替换，杜绝旧前端或占位页混入新镜像。
 - 概览「近 24h 消耗 / 历史使用」**同时显示 USD 与 token**(此前只有 USD)。
 - token 数**全语种统一显示**:< 10M 千分位整数、≥ 10M 两位小数 M;适度放大并上主色。
 - 历史 token 查询改 29 天窗口(self data 接口限 1 个月,超范围被拒返回 0)。
@@ -68,6 +68,7 @@
 
 ## 部署 / 构建
 
+- **tri 完整构建成为默认路径** —— `deploy/deploy.sh` 与 `deploy/deploy-newapi.sh` 默认 `SKIP_WEB=0`，在生产机执行 `bun install --frozen-lockfile`、前端生产构建、Go 镜像构建、容器替换和健康检查；`SKIP_WEB=1` 保留为可选的已校验 prebuilt 路径，不再禁止 tri 构建前端。
 - **Codex usage accounting 已上线**（2026-07-25）—— Codex 非流式/流式请求统一 exactly-once 收口：无 usage 的正常 completion 记零 token 成功，clean EOF、scanner error 和 completion 前取消记失败，失败时保留已观察到的部分 usage；缺失 `total_tokens` 时按 OpenAI 子集语义计算，不重复累加 reasoning/cache。补齐 helper、executor、Claude translator、race 与 Redis queue 回归，详见 [docs/bug-fix-July25.md](./docs/bug-fix-July25.md)。
 - **CLIProxyAPI commit 镜像一键部署** —— 新增 `deploy/deploy-cliproxy.sh`，镜像固定为 `deploy-<7位 Git SHA>`；自动发现现役动态池、非 main canary → 其余池 → main 顺序升级，保留私有池资源限制，部署期间暂停 provision，失败逆序回滚，成功后同步未来新池镜像。动态备份支持从 new-api 容器读取权限受限 registry，并用缓存 sudo 归档 root-owned OAuth 文件而不改原文件权限。
 - **2026-07-25 生产验收** —— `cli-proxy-api-main` 与数字池 `4–12` 共 10 个现役容器全部运行 `winbeau/cli-proxy-api:deploy-43116d2`；端口 `8317`、`8321–8329` 的 `/healthz` 全部正常，`xju-provision` 为 active，`.maintenance` 不存在；`.cliproxy-image.env` 记录当前镜像与 `v0.9.1` 回滚锚。

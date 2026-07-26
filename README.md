@@ -59,13 +59,16 @@
 
 ## 部署
 
-开发改动与前端发布物在本机完成；`claude-tri` 只拉取已提交代码并部署。New API 与
-CLIProxyAPI 使用独立入口：
+开发改动在本机完成并推送；`claude-tri` 负责生产构建与部署,可完整运行 Bun 前端构建和
+Docker Go 构建。New API 与 CLIProxyAPI 使用独立入口：
 
 ```bash
-# New API：先安装与 HEAD 匹配的前端发布物，再只编 Go 并换容器
+# New API：拉取 main，服务器完整构建前端和 Go，换容器并验活
 cd /home/winbeau/opt/xju-api
-PULL=0 SKIP_WEB=1 bash deploy/deploy.sh
+bash deploy/deploy.sh
+
+# 可选：已安装与 HEAD 匹配的 prebuilt/current 时跳过前端构建
+PULL=0 SKIP_WEB=1 bash deploy/deploy.sh release-tag
 
 # CLIProxyAPI：只构建 Go，镜像固定为 deploy-<当前 7 位提交 SHA>
 bash deploy/deploy-cliproxy.sh --dry-run

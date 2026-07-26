@@ -405,7 +405,7 @@ xju-api/
 
 ### Phase 3 — 前端裁剪 + 换肤（预估 3–5 天）
 
-> 在本地对顶层 `web/` 改；`scripts/package-web-dist.sh` 本机构建并生成带 commit + SHA-256 的发布物，Codex-tri 用 `deploy/install-web-dist.sh` 安装到 `server/newapi/prebuilt/current/dist`，再由 `deploy/build-newapi.sh` 仅编 Go 并把产物嵌入镜像。改动步骤沉淀进 `docs/newapi-customization.md`。
+> 在本地对顶层 `web/` 开发和测试；生产发布由 Codex-tri 运行 `bash deploy/deploy.sh`，默认在服务器执行 Bun 前端构建并通过 `deploy/build-newapi.sh` 构建 Go 镜像。`scripts/package-web-dist.sh` + `deploy/install-web-dist.sh` 保留为可选 prebuilt 路径。改动步骤沉淀进 `docs/newapi-customization.md`。
 
 | 任务 | 关键点 |
 |---|---|
