@@ -25,28 +25,46 @@ export const XJU_CLAUDE_DEFAULT_MODELS = {
   opusModel: 'claude-opus-5',
 } as const
 
+export const XJU_CODEX_DEFAULT_MODELS = {
+  model: 'gpt-5.6-sol',
+  haikuModel: 'gpt-5.6-luna',
+  sonnetModel: 'gpt-5.6-terra',
+  opusModel: 'gpt-5.6-sol',
+} as const
+
 export type AppType = 'claude' | 'codex' | 'gemini'
+export type CCSwitchPoolProvider = 'codex' | 'claude'
 export type Models = Record<string, string>
 
 export function endpointForApp(app: AppType): string {
   return app === 'codex' ? `${PUBLIC_API_ENDPOINT}/v1` : PUBLIC_API_ENDPOINT
 }
 
-function resolvedClaudeModels(models: Models) {
+export function getCCSwitchDefaultModels(provider?: CCSwitchPoolProvider) {
+  return provider === 'claude'
+    ? XJU_CLAUDE_DEFAULT_MODELS
+    : XJU_CODEX_DEFAULT_MODELS
+}
+
+function resolvedClaudeModels(
+  models: Models,
+  defaults: Models = XJU_CLAUDE_DEFAULT_MODELS
+) {
   return {
-    model: models.model || XJU_CLAUDE_DEFAULT_MODELS.model,
-    haikuModel: models.haikuModel || XJU_CLAUDE_DEFAULT_MODELS.haikuModel,
-    sonnetModel: models.sonnetModel || XJU_CLAUDE_DEFAULT_MODELS.sonnetModel,
-    opusModel: models.opusModel || XJU_CLAUDE_DEFAULT_MODELS.opusModel,
+    model: models.model || defaults.model,
+    haikuModel: models.haikuModel || defaults.haikuModel,
+    sonnetModel: models.sonnetModel || defaults.sonnetModel,
+    opusModel: models.opusModel || defaults.opusModel,
   }
 }
 
 export function buildClaudeConfig(
   token: string,
   models: Models,
-  endpoint = PUBLIC_API_ENDPOINT
+  endpoint = PUBLIC_API_ENDPOINT,
+  defaults: Models = XJU_CLAUDE_DEFAULT_MODELS
 ) {
-  const resolved = resolvedClaudeModels(models)
+  const resolved = resolvedClaudeModels(models, defaults)
   return {
     env: {
       ANTHROPIC_BASE_URL: endpoint.replace(/\/+$/, ''),
@@ -63,10 +81,12 @@ export function buildCCSwitchURL(
   app: AppType,
   name: string,
   models: Models,
-  apiKey: string
+  apiKey: string,
+  claudeDefaults: Models = XJU_CLAUDE_DEFAULT_MODELS
 ): string {
   const params = new URLSearchParams()
-  const resolved = app === 'claude' ? resolvedClaudeModels(models) : models
+  const resolved =
+    app === 'claude' ? resolvedClaudeModels(models, claudeDefaults) : models
   params.set('resource', 'provider')
   params.set('app', app)
   params.set('name', name)

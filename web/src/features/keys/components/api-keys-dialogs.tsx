@@ -24,7 +24,8 @@ import { ClaudeConfigDialog } from './pool-integration/claude-config-dialog'
 import { CodexConfigDialog } from './pool-integration/codex-config-dialog'
 
 export function ApiKeysDialogs() {
-  const { open, setOpen, currentRow, resolvedKey } = useApiKeys()
+  const { open, setOpen, currentRow, currentProvider, resolvedKey } =
+    useApiKeys()
 
   return (
     <>
@@ -38,6 +39,7 @@ export function ApiKeysDialogs() {
         open={open === 'cc-switch'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         tokenKey={resolvedKey}
+        provider={currentProvider}
       />
       <CodexConfigDialog
         open={open === 'codex-config'}

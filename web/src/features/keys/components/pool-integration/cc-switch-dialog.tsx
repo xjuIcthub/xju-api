@@ -32,11 +32,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { getUserModels } from '@/lib/api'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 
+import type { ApiKeyProvider } from '../../lib'
 import {
-  XJU_CLAUDE_DEFAULT_MODELS,
   buildCCSwitchURL,
   buildClaudeConfig,
   endpointForApp,
+  getCCSwitchDefaultModels,
   type AppType,
   type Models,
 } from './cc-switch-config'
@@ -79,14 +80,16 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   tokenKey: string
+  provider?: ApiKeyProvider
 }
 
 export function CCSwitchDialog(props: Props) {
   const { t } = useTranslation()
+  const providerDefaults = getCCSwitchDefaultModels(props.provider)
   const [app, setApp] = useState<AppType>('claude')
   const [name, setName] = useState<string>(APP_CONFIGS.claude.defaultName)
   const [models, setModels] = useState<Models>({
-    ...XJU_CLAUDE_DEFAULT_MODELS,
+    ...providerDefaults,
   })
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [showToken, setShowToken] = useState(false)
@@ -106,21 +109,31 @@ export function CCSwitchDialog(props: Props) {
   const token = normalizedToken(props.tokenKey)
   const endpoint = endpointForApp(app)
   const deepLink = useMemo(
-    () => buildCCSwitchURL(app, name, models, token),
-    [app, models, name, token]
+    () => buildCCSwitchURL(app, name, models, token, providerDefaults),
+    [app, models, name, providerDefaults, token]
   )
   const maskedConfigJSON = useMemo(
     () =>
       JSON.stringify(
-        buildClaudeConfig(showToken ? token : maskedToken(token), models),
+        buildClaudeConfig(
+          showToken ? token : maskedToken(token),
+          models,
+          undefined,
+          providerDefaults
+        ),
         null,
         2
       ),
-    [models, showToken, token]
+    [models, providerDefaults, showToken, token]
   )
   const fullConfigJSON = useMemo(
-    () => JSON.stringify(buildClaudeConfig(token, models), null, 2),
-    [models, token]
+    () =>
+      JSON.stringify(
+        buildClaudeConfig(token, models, undefined, providerDefaults),
+        null,
+        2
+      ),
+    [models, providerDefaults, token]
   )
 
   useEffect(() => {
@@ -128,16 +141,16 @@ export function CCSwitchDialog(props: Props) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setApp('claude')
     setName(APP_CONFIGS.claude.defaultName)
-    setModels({ ...XJU_CLAUDE_DEFAULT_MODELS })
+    setModels({ ...providerDefaults })
     setAdvancedOpen(false)
     setShowToken(false)
-  }, [props.open])
+  }, [props.open, providerDefaults])
 
   const handleAppChange = (value: string) => {
     const nextApp = value as AppType
     setApp(nextApp)
     setName(APP_CONFIGS[nextApp].defaultName)
-    setModels(nextApp === 'claude' ? { ...XJU_CLAUDE_DEFAULT_MODELS } : {})
+    setModels(nextApp === 'claude' ? { ...providerDefaults } : {})
     setAdvancedOpen(false)
   }
 

@@ -70,6 +70,7 @@ export function DataTableRowActions<TData>({
   const {
     setOpen,
     setCurrentRow,
+    setCurrentProvider,
     triggerRefresh,
     setResolvedKey,
     resolveRealKey,
@@ -149,6 +150,7 @@ export function DataTableRowActions<TData>({
     if (!realKey) return
     setResolvedKey(realKey)
     setCurrentRow(apiKey)
+    setCurrentProvider(provider)
     setOpen('cc-switch')
   }
 

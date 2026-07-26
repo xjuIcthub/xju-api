@@ -18,7 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'bun:test'
 
-import { buildCCSwitchURL, buildClaudeConfig } from './cc-switch-config'
+import {
+  XJU_CODEX_DEFAULT_MODELS,
+  buildCCSwitchURL,
+  buildClaudeConfig,
+  getCCSwitchDefaultModels,
+} from './cc-switch-config'
 
 describe('XJU Claude defaults', () => {
   test('uses Claude-family models for each Claude Code role', () => {
@@ -44,5 +49,33 @@ describe('XJU Claude defaults', () => {
     expect(url.searchParams.get('haikuModel')).toBe('claude-haiku-4-5-20251001')
     expect(url.searchParams.get('sonnetModel')).toBe('claude-sonnet-5')
     expect(url.searchParams.get('opusModel')).toBe('claude-opus-5')
+  })
+})
+
+describe('XJU Codex pool defaults', () => {
+  test('maps Sol, Terra and Luna to the Claude Code roles', () => {
+    const defaults = getCCSwitchDefaultModels('codex')
+    expect(defaults).toEqual(XJU_CODEX_DEFAULT_MODELS)
+    expect(buildClaudeConfig('sk-test', {}, undefined, defaults)).toEqual({
+      env: {
+        ANTHROPIC_BASE_URL: 'https://api.selab.top',
+        ANTHROPIC_AUTH_TOKEN: 'sk-test',
+        ANTHROPIC_MODEL: 'gpt-5.6-sol',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5.6-luna',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5.6-terra',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5.6-sol',
+      },
+    })
+  })
+
+  test('keeps the GPT role mapping in the CC Switch Deep Link', () => {
+    const defaults = getCCSwitchDefaultModels('codex')
+    const url = new URL(
+      buildCCSwitchURL('claude', 'XJU API - Claude', {}, 'sk-test', defaults)
+    )
+    expect(url.searchParams.get('model')).toBe('gpt-5.6-sol')
+    expect(url.searchParams.get('haikuModel')).toBe('gpt-5.6-luna')
+    expect(url.searchParams.get('sonnetModel')).toBe('gpt-5.6-terra')
+    expect(url.searchParams.get('opusModel')).toBe('gpt-5.6-sol')
   })
 })
