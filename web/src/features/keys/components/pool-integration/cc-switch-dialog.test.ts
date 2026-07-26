@@ -20,6 +20,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   XJU_CODEX_DEFAULT_MODELS,
+  XJU_CODEX_CLAUDE_COMPACTION_ENV,
   buildCCSwitchURL,
   buildClaudeConfig,
   getClaudeCodeDefaultModels,
@@ -56,7 +57,9 @@ describe('XJU Codex pool defaults', () => {
   test('maps Sol, Terra and Luna to the Claude Code roles', () => {
     const defaults = getClaudeCodeDefaultModels('codex')
     expect(defaults).toEqual(XJU_CODEX_DEFAULT_MODELS)
-    expect(buildClaudeConfig('sk-test', {}, undefined, defaults)).toEqual({
+    expect(
+      buildClaudeConfig('sk-test', {}, undefined, defaults, 'codex')
+    ).toEqual({
       env: {
         ANTHROPIC_BASE_URL: 'https://api.selab.top',
         ANTHROPIC_AUTH_TOKEN: 'sk-test',
@@ -64,6 +67,7 @@ describe('XJU Codex pool defaults', () => {
         ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5.6-luna',
         ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5.6-terra',
         ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5.6-sol',
+        ...XJU_CODEX_CLAUDE_COMPACTION_ENV,
       },
     })
   })
@@ -71,11 +75,34 @@ describe('XJU Codex pool defaults', () => {
   test('keeps the GPT role mapping in the CC Switch Deep Link', () => {
     const defaults = getClaudeCodeDefaultModels('codex')
     const url = new URL(
-      buildCCSwitchURL('claude', 'XJU API - Claude', {}, 'sk-test', defaults)
+      buildCCSwitchURL(
+        'claude',
+        'XJU API - Claude',
+        {},
+        'sk-test',
+        defaults,
+        'codex'
+      )
     )
     expect(url.searchParams.get('model')).toBe('gpt-5.6-sol')
     expect(url.searchParams.get('haikuModel')).toBe('gpt-5.6-luna')
     expect(url.searchParams.get('sonnetModel')).toBe('gpt-5.6-terra')
     expect(url.searchParams.get('opusModel')).toBe('gpt-5.6-sol')
+    expect(url.searchParams.get('configFormat')).toBe('json')
+
+    const config = JSON.parse(
+      Buffer.from(url.searchParams.get('config') ?? '', 'base64').toString(
+        'utf8'
+      )
+    )
+    expect(config.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe(
+      XJU_CODEX_CLAUDE_COMPACTION_ENV.CLAUDE_CODE_MAX_CONTEXT_TOKENS
+    )
+    expect(config.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe(
+      XJU_CODEX_CLAUDE_COMPACTION_ENV.CLAUDE_CODE_AUTO_COMPACT_WINDOW
+    )
+    expect(config.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe(
+      XJU_CODEX_CLAUDE_COMPACTION_ENV.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
+    )
   })
 })

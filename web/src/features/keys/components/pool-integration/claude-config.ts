@@ -42,11 +42,13 @@ export function buildClaudeSettingsJson(
     normalizeToken(tokenKey),
     {},
     endpoint,
-    defaults
+    defaults,
+    provider
   )
   return JSON.stringify(
     {
       enableWorkflows: true,
+      autoCompactEnabled: true,
       env: {
         ANTHROPIC_AUTH_TOKEN: config.env.ANTHROPIC_AUTH_TOKEN,
         ANTHROPIC_BASE_URL: config.env.ANTHROPIC_BASE_URL,
@@ -56,6 +58,16 @@ export function buildClaudeSettingsJson(
           config.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
         ANTHROPIC_MODEL: config.env.ANTHROPIC_MODEL,
         CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: '1',
+        ...('CLAUDE_CODE_MAX_CONTEXT_TOKENS' in config.env
+          ? {
+              CLAUDE_CODE_MAX_CONTEXT_TOKENS:
+                config.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+              CLAUDE_CODE_AUTO_COMPACT_WINDOW:
+                config.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW,
+              CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:
+                config.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE,
+            }
+          : {}),
       },
       permissions: {
         allow: [

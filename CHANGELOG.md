@@ -42,8 +42,8 @@
 
 ## Codex 配置 / 模型
 
-- **Claude Code 一键配置** —— API 密钥操作列新增 Anthropic 图标按钮，可直接复制 `~/.claude/settings.json`；端点取当前部署根地址且不附加 `/v1`，Token 自动规范为单个 `sk-` 前缀，并预设 Sol / Terra / Luna 到 Opus / Sonnet / Haiku 的模型映射。
-- **CC Switch Claude 一键配置** —— API Token 行在 Codex 图标右侧新增 CC Switch 官方 Logo；配置弹窗默认 Claude 模式，端点固定 `https://api.selab.top`、Full URL 为否，并预设 XJU 三档映射：主模型/Opus → `gpt-5.6-sol`、Sonnet → `gpt-5.6-terra`、Haiku → `gpt-5.6-luna`。可复制标准 Config JSON 或 Deep Link；Token 默认遮罩，配置只在浏览器本地生成。
+- **Claude Code 一键配置** —— API 密钥操作列新增 Anthropic 图标按钮，可直接复制 `~/.claude/settings.json`；端点取当前部署根地址且不附加 `/v1`，Token 自动规范为单个 `sk-` 前缀，并预设 Sol / Terra / Luna 到 Opus / Sonnet / Haiku 的模型映射。GPT/Codex 号池额外声明 `372000` token 模型窗口，并按 `200000 × 70% = 140000` token 提前自动压缩，避免会话抵达硬上限后连 compact 请求本身也无法提交；Claude 官方模型继续使用客户端原生窗口策略。
+- **CC Switch Claude 一键配置** —— API Token 行在 Codex 图标右侧新增 CC Switch 官方 Logo；配置弹窗默认 Claude 模式，端点固定 `https://api.selab.top`、Full URL 为否，并预设 XJU 三档映射：主模型/Opus → `gpt-5.6-sol`、Sonnet → `gpt-5.6-terra`、Haiku → `gpt-5.6-luna`。可复制标准 Config JSON 或 Deep Link；Token 默认遮罩，配置只在浏览器本地生成。Claude 深链同时携带完整 `env` 配置，因此 GPT 号池通过 CC Switch 导入时也会保留提前压缩参数。
 - **Codex 一键配置** —— API 密钥操作列直达按钮,一键复制 `config.toml` / `auth.json`,去掉 CLI 字样,ChatGPT 花瓣图标。
 - **Responses WebSocket** —— `api.selab.top/v1/responses` 支持 `101 Switching Protocols`;L1 先验日卡、首帧按模型/分组选池,再保持到 CLIProxyAPI 的持久 WebSocket,每个 `response.create` 继续预扣费、按 usage 结算并写用量日志;一键配置默认生成 `supports_websockets = true`。
 - 修 base_url 变 localhost、key 变 `sk-sk` 两个 bug;默认模型改 `gpt-5.6-sol`。

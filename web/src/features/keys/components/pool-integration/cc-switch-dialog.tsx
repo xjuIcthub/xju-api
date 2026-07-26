@@ -109,8 +109,16 @@ export function CCSwitchDialog(props: Props) {
   const token = normalizedToken(props.tokenKey)
   const endpoint = endpointForApp(app)
   const deepLink = useMemo(
-    () => buildCCSwitchURL(app, name, models, token, providerDefaults),
-    [app, models, name, providerDefaults, token]
+    () =>
+      buildCCSwitchURL(
+        app,
+        name,
+        models,
+        token,
+        providerDefaults,
+        props.provider
+      ),
+    [app, models, name, props.provider, providerDefaults, token]
   )
   const maskedConfigJSON = useMemo(
     () =>
@@ -119,21 +127,28 @@ export function CCSwitchDialog(props: Props) {
           showToken ? token : maskedToken(token),
           models,
           undefined,
-          providerDefaults
+          providerDefaults,
+          props.provider
         ),
         null,
         2
       ),
-    [models, providerDefaults, showToken, token]
+    [models, props.provider, providerDefaults, showToken, token]
   )
   const fullConfigJSON = useMemo(
     () =>
       JSON.stringify(
-        buildClaudeConfig(token, models, undefined, providerDefaults),
+        buildClaudeConfig(
+          token,
+          models,
+          undefined,
+          providerDefaults,
+          props.provider
+        ),
         null,
         2
       ),
-    [models, providerDefaults, token]
+    [models, props.provider, providerDefaults, token]
   )
 
   useEffect(() => {

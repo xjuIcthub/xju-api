@@ -32,6 +32,12 @@ export const XJU_CODEX_DEFAULT_MODELS = {
   opusModel: 'gpt-5.6-sol',
 } as const
 
+export const XJU_CODEX_CLAUDE_COMPACTION_ENV = {
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS: '372000',
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000',
+  CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '70',
+} as const
+
 export type AppType = 'claude' | 'codex' | 'gemini'
 export type ClaudeCodePoolProvider = 'codex' | 'claude'
 export type Models = Record<string, string>
@@ -62,7 +68,8 @@ export function buildClaudeConfig(
   token: string,
   models: Models,
   endpoint = PUBLIC_API_ENDPOINT,
-  defaults: Models = XJU_CLAUDE_DEFAULT_MODELS
+  defaults: Models = XJU_CLAUDE_DEFAULT_MODELS,
+  provider?: ClaudeCodePoolProvider
 ) {
   const resolved = resolvedClaudeModels(models, defaults)
   return {
@@ -73,8 +80,16 @@ export function buildClaudeConfig(
       ANTHROPIC_DEFAULT_HAIKU_MODEL: resolved.haikuModel,
       ANTHROPIC_DEFAULT_SONNET_MODEL: resolved.sonnetModel,
       ANTHROPIC_DEFAULT_OPUS_MODEL: resolved.opusModel,
+      ...(provider === 'codex' ? XJU_CODEX_CLAUDE_COMPACTION_ENV : {}),
     },
   }
+}
+
+function encodeBase64JSON(value: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value))
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 export function buildCCSwitchURL(
@@ -82,7 +97,8 @@ export function buildCCSwitchURL(
   name: string,
   models: Models,
   apiKey: string,
-  claudeDefaults: Models = XJU_CLAUDE_DEFAULT_MODELS
+  claudeDefaults: Models = XJU_CLAUDE_DEFAULT_MODELS,
+  provider?: ClaudeCodePoolProvider
 ): string {
   const params = new URLSearchParams()
   const resolved =
@@ -94,6 +110,21 @@ export function buildCCSwitchURL(
   params.set('apiKey', apiKey)
   for (const [key, value] of Object.entries(resolved)) {
     if (value) params.set(key, value)
+  }
+  if (app === 'claude') {
+    params.set('configFormat', 'json')
+    params.set(
+      'config',
+      encodeBase64JSON(
+        buildClaudeConfig(
+          apiKey,
+          models,
+          PUBLIC_API_ENDPOINT,
+          claudeDefaults,
+          provider
+        )
+      )
+    )
   }
   params.set('homepage', PUBLIC_API_ENDPOINT)
   params.set('enabled', 'true')

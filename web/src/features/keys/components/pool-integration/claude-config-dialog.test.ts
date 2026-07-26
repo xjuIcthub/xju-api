@@ -28,6 +28,7 @@ describe('Claude Code configuration', () => {
 
     expect(config).toEqual({
       enableWorkflows: true,
+      autoCompactEnabled: true,
       env: {
         ANTHROPIC_BASE_URL: 'https://xju.example',
         ANTHROPIC_AUTH_TOKEN: 'sk-test-key',
@@ -67,6 +68,9 @@ describe('Claude Code configuration', () => {
       ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5.6-terra',
       ANTHROPIC_MODEL: 'gpt-5.6-sol',
       CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: '1',
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: '372000',
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: '200000',
+      CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '70',
     })
   })
 })
