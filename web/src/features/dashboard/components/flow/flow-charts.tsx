@@ -77,6 +77,7 @@ import {
 } from '@/features/dashboard/lib/flow-selection'
 import type {
   DashboardFilters,
+  DashboardProvider,
   FlowLinkSelection,
   FlowMetric,
   FlowNodeFilter,
@@ -96,6 +97,7 @@ import { FlowNodeFilterControl } from './flow-node-filter'
 
 interface FlowChartsProps {
   filters?: DashboardFilters
+  provider: DashboardProvider
   // When false, sensitive node labels are masked in the rendered Sankey.
   sensitiveVisible?: boolean
 }
@@ -325,8 +327,11 @@ export function FlowCharts(props: FlowChartsProps) {
     ]
   )
   const flowQueryParams = useMemo(
-    () => buildQueryParams(timeRange, props.filters),
-    [props.filters, timeRange]
+    () => ({
+      ...buildQueryParams(timeRange, props.filters),
+      provider: props.provider,
+    }),
+    [props.filters, props.provider, timeRange]
   )
 
   const {
@@ -335,7 +340,7 @@ export function FlowCharts(props: FlowChartsProps) {
     isError,
     isLoading,
   } = useQuery({
-    queryKey: ['dashboard', 'flow', flowQueryParams, flowRole],
+    queryKey: ['dashboard', 'flow', flowQueryParams, flowRole, props.provider],
     queryFn: () => getFlowQuotaDates(flowQueryParams, isAdmin),
     select: (res) =>
       requireSuccessfulFlowRows(res, t('Please try again later.')),

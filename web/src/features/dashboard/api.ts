@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  DashboardProvider,
   FlowQuotaDataItem,
   QuotaDataItem,
   UptimeGroupResult,
@@ -40,7 +41,7 @@ export async function getUserQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
-    provider?: 'codex' | 'claude'
+    provider?: DashboardProvider
   },
   isAdmin = false
 ) {
@@ -59,7 +60,7 @@ export async function getUserQuotaDates(
 export async function getUserQuotaDataByUsers(params: {
   start_timestamp: number
   end_timestamp: number
-  provider?: 'codex' | 'claude'
+  provider?: DashboardProvider
 }) {
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     '/api/data/users',
@@ -74,7 +75,7 @@ export async function getFlowQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
-    provider?: 'codex' | 'claude'
+    provider?: DashboardProvider
   },
   isAdmin = false
 ) {

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Claude } from '@lobehub/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
@@ -38,6 +39,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { IconCodex } from '@/assets/custom/icon-codex'
 import { Dialog } from '@/components/dialog'
 import { SectionPageLayout } from '@/components/layout'
 import { StatusBadge } from '@/components/status-badge'
@@ -113,9 +115,21 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 function poolDisplayLabel(pool: PoolInfo): string {
-  const provider = pool.provider === 'claude' ? 'Claude' : 'Codex'
-  if (pool.kind !== 'private') return `${pool.label} · ${provider}`
+  if (pool.kind !== 'private') return pool.label
   return `@${pool.owner_username || pool.owner_user_id || pool.id}`
+}
+
+function PoolProviderLogo({
+  provider,
+  className,
+}: {
+  provider: PoolInfo['provider']
+  className?: string
+}) {
+  if (provider === 'claude') {
+    return <Claude.Color className={className} aria-label='Claude' />
+  }
+  return <IconCodex className={className} aria-label='Codex / GPT / OpenAI' />
 }
 
 type NewPoolType = 'cpa-codex' | 'cpa-claude' | 'gopool'
@@ -167,9 +181,6 @@ export function Pool() {
   const activePool = pools.find((p) => p.id === pool)
   const activeProvider = activePool?.provider === 'claude' ? 'claude' : 'codex'
   const isCodexPool = activeProvider === 'codex'
-  const activeProviderBrand =
-    activeProvider === 'claude' ? 'Claude · Anthropic' : 'Codex · GPT · OpenAI'
-
   // xju-api:new — the initial selection ('default') is only a pre-load
   // placeholder; the env-seeded default/k12 pools can be retired in favour of
   // dynamic pools, so 'default' may not exist. Once the real list loads, snap
@@ -520,10 +531,11 @@ export function Pool() {
     <SectionPageLayout>
       <SectionPageLayout.Title>
         <span className='inline-flex min-w-0 items-center gap-2'>
-          <span className='truncate'>{t('Account Pool')}</span>
-          <Badge variant='secondary' className='shrink-0'>
-            {activeProviderBrand}
-          </Badge>
+          <PoolProviderLogo
+            provider={activeProvider}
+            className='size-5 shrink-0'
+          />
+          <span className='truncate'>{t('All Pools')}</span>
           <Badge variant='outline' className='shrink-0'>
             {accessLabel}
           </Badge>
@@ -537,6 +549,9 @@ export function Pool() {
             options={pools.map((item) => ({
               value: item.id,
               label: poolDisplayLabel(item),
+              icon: (
+                <PoolProviderLogo provider={item.provider} className='size-4' />
+              ),
             }))}
             value={pool}
             onValueChange={(value) => {
@@ -724,7 +739,7 @@ export function Pool() {
                                   {plan}
                                 </Badge>
                               )}
-                              {isCodexPool && verdictMeta && (
+                              {verdictMeta && (
                                 <StatusBadge
                                   label={`✓ ${t(verdictMeta.labelKey)}`}
                                   variant={verdictMeta.variant}
@@ -825,23 +840,21 @@ export function Pool() {
                             </div>
                           </div>
                           <div className='flex shrink-0 items-center gap-1'>
-                            {isCodexPool && (
-                              <Button
-                                type='button'
-                                variant='ghost'
-                                size='icon-sm'
-                                aria-label={t('Verify')}
-                                title={t('Verify now')}
-                                onClick={() => verifyMutation.mutate(file.name)}
-                                disabled={verifyMutation.isPending}
-                              >
-                                {verifyingName === file.name ? (
-                                  <Loader2 className='size-4 animate-spin' />
-                                ) : (
-                                  <Activity className='size-4' />
-                                )}
-                              </Button>
-                            )}
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              aria-label={t('Verify')}
+                              title={t('Verify now')}
+                              onClick={() => verifyMutation.mutate(file.name)}
+                              disabled={verifyMutation.isPending}
+                            >
+                              {verifyingName === file.name ? (
+                                <Loader2 className='size-4 animate-spin' />
+                              ) : (
+                                <Activity className='size-4' />
+                              )}
+                            </Button>
                             {isCodexPool && (
                               <Button
                                 type='button'

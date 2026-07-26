@@ -28,6 +28,7 @@ const (
 
 	PoolProviderCodex  = "codex"
 	PoolProviderClaude = "claude"
+	PoolProviderAll    = "all"
 
 	ContextKeyPrivatePoolID    = "xju_private_pool_id"
 	ContextKeyPrivatePoolScope = "xju_private_pool_scope"

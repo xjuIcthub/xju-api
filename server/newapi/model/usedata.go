@@ -156,6 +156,13 @@ func GetQuotaDataByUsername(username string, startTime int64, endTime int64) (qu
 }
 
 func quotaDataProviderQuery(query *gorm.DB, provider string) *gorm.DB {
+	if strings.EqualFold(strings.TrimSpace(provider), common.PoolProviderAll) {
+		return query.Where(
+			"(provider = ? OR provider = ? OR provider = '')",
+			common.PoolProviderCodex,
+			common.PoolProviderClaude,
+		)
+	}
 	if common.NormalizePoolProvider(provider) == common.PoolProviderClaude {
 		return query.Where("provider = ?", common.PoolProviderClaude)
 	}

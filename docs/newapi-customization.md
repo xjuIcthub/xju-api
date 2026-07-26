@@ -27,7 +27,8 @@
 **前端自有(整目录/整文件,`web/src/`)**:
 
 - `registry/xju-modules.ts` —— 自有模块注册中心(侧栏项/开关键/URL 映射/开关元数据)
-- `features/pool/` —— 管理员号池管理页：公共池支持 `CPA (Codex)` / `CPA (Claude)` / `go-pool`，Provider 品牌标识与能力门控；Codex 支持 OAuth/ZIP/JSON，Claude 仅 Anthropic OAuth。`codex-login-button.tsx` 已泛化为 Provider-aware OAuth 交互，同时保持私人号池 Codex 登录复用
+- `features/pool/` —— 普通用户可读、管理员可管理的「所有号池」页：公共池支持 `CPA (Codex)` / `CPA (Claude)` / `go-pool`，用六瓣 OpenAI / 官方橙色 Claude Logo 区分 Provider；Codex 支持 OAuth/ZIP/JSON，Claude 仅 Anthropic OAuth，并支持逐账号无推理验活。`codex-login-button.tsx` 已泛化为 Provider-aware OAuth 交互，同时保持私人号池 Codex 登录复用
+- `features/dashboard/` —— 单一数据看板在模型调用分析、分流、用户统计三个 Tab 共享 `全部 / Codex / Claude` Provider 选择器；独立 Claude 概览/看板路由与侧栏入口已删除
 - `features/private-pool/` —— 用户「我的号池」引导 + 单池管理工作台 + owner-scoped Codex Web 登录导入
 - `features/invite-codes/` —— 邀请码(`api.ts`、`invite-code-dialog.tsx`、`auth-section.tsx`)
 - `features/keys/components/pool-integration/` —— `cc-switch-dialog.tsx`（Claude 默认、标准 Config JSON / Deep Link、Token 本地遮罩）、`codex-config-dialog.tsx`、`claude-config-dialog.tsx`（当前部署地址的 `~/.claude/settings.json`）
@@ -46,11 +47,11 @@
 **后端自有(`server/newapi/`,统一 `xju_` 前缀)**:
 
 - `controller/xju_pool_auth.go`(+test)、`controller/xju_private_pool_oauth.go`(+test)、`controller/xju_private_pool_settings.go`、`controller/xju_invite_code.go`
-- `service/xju_pool_client.go`、`service/xju_pool_cleanup.go`、`service/xju_private_pool_oauth.go`(+test)、`service/xju_invite_code.go`(+test)
+- `service/xju_pool_client.go`、`service/xju_pool_cleanup.go`、`service/xju_pool_probe.go`(+test，Codex / Claude 逐账号验活)、`service/xju_private_pool_oauth.go`(+test)、`service/xju_invite_code.go`(+test)
 - `service/xju_pool_provision.go`、`service/xju_pool_channel.go` —— Provider/模式组合校验、watcher 契约、Provider 模型目录建渠道
 - `service/xju_private_pool_billing_test.go` —— 私人号池免用户余额、但保留统一 quota / Token / used-quota 计量的回归测试
 - `model/xju_invite_code.go`、`common/xju_pool_registry.go`(+test)
-- `model/usedata.go`、`model/usedata_flow.go` —— `quota_data.provider` 写入与 Codex/Claude 聚合隔离
+- `model/usedata.go`、`model/usedata_flow.go` —— `quota_data.provider` 写入，支持 Codex / Claude 隔离与 All 直接聚合
 
 **后端注入点**:
 

@@ -160,6 +160,11 @@ export function ComboboxInput({
 
   return (
     <div ref={containerRef} className='relative'>
+      {!open && selectedOption?.icon && (
+        <span className='pointer-events-none absolute top-1/2 left-3 z-10 flex size-4 -translate-y-1/2 items-center justify-center'>
+          {selectedOption.icon}
+        </span>
+      )}
       <Input
         ref={inputRef}
         id={id}
@@ -193,12 +198,16 @@ export function ComboboxInput({
           pointerFocusRef.current = false
         }}
         onKeyDown={handleKeyDown}
-        className={cn('pr-9', className)}
+        className={cn(
+          'pr-9',
+          !open && selectedOption?.icon && 'pl-9',
+          className
+        )}
       />
       <ChevronsUpDown className='pointer-events-none absolute top-1/2 right-3 size-4 shrink-0 -translate-y-1/2 opacity-50' />
 
       {showDropdown && (
-        <div className='bg-popover text-popover-foreground absolute top-full z-100 mt-1 w-full rounded-md border '>
+        <div className='bg-popover text-popover-foreground absolute top-full z-100 mt-1 w-full rounded-md border'>
           {filteredOptions.length > 0 ? (
             <ul
               ref={listRef}

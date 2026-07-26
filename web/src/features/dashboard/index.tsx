@@ -35,6 +35,7 @@ import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { DashboardProviderSelect } from './components/dashboard-provider-select'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
@@ -54,6 +55,7 @@ import {
 import type {
   DashboardChartPreferences,
   DashboardFilters,
+  DashboardProvider,
   QuotaDataItem,
   UserChartsFilters,
 } from './types'
@@ -183,12 +185,6 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   models: {
     titleKey: 'Model Call Analytics',
   },
-  'overview-claude': {
-    titleKey: 'Overview (Claude)',
-  },
-  'models-claude': {
-    titleKey: 'Dashboard (Claude)',
-  },
   flow: {
     titleKey: 'Flow',
   },
@@ -204,14 +200,11 @@ export function Dashboard() {
   const userRole = useAuthStore((state) => state.auth.user?.role)
   const activeSection = (params.section ??
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
-  const dashboardProvider = activeSection.endsWith('-claude')
-    ? 'claude'
-    : 'codex'
-  const isOverviewSection =
-    activeSection === 'overview' || activeSection === 'overview-claude'
-  const isModelsSection =
-    activeSection === 'models' || activeSection === 'models-claude'
+  const isOverviewSection = activeSection === 'overview'
+  const isModelsSection = activeSection === 'models'
 
+  const [dashboardProvider, setDashboardProvider] =
+    useState<DashboardProvider>('all')
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
   const [dataLoading, setDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
@@ -258,20 +251,13 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
-  const visibleSections = useMemo(() => {
-    if (dashboardProvider === 'claude') {
-      return DASHBOARD_SECTION_IDS.filter(
-        (section) => section === 'models-claude'
-      )
-    }
-    return DASHBOARD_SECTION_IDS.filter(
-      (section) =>
-        section !== 'overview' &&
-        section !== 'overview-claude' &&
-        section !== 'models-claude' &&
-        (section !== 'users' || isAdmin)
-    )
-  }, [dashboardProvider, isAdmin])
+  const visibleSections = useMemo(
+    () =>
+      DASHBOARD_SECTION_IDS.filter(
+        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+      ),
+    [isAdmin]
+  )
   const handleSectionChange = useCallback(
     (section: string) => {
       void navigate({
@@ -284,6 +270,10 @@ export function Dashboard() {
   const showSectionTabs = !isOverviewSection && visibleSections.length > 1
   const modelActions = isModelsSection ? (
     <>
+      <DashboardProviderSelect
+        value={dashboardProvider}
+        onValueChange={setDashboardProvider}
+      />
       <ModelsChartPreferences
         preferences={chartPreferences}
         onPreferencesChange={handleChartPreferencesChange}
@@ -323,6 +313,10 @@ export function Dashboard() {
               : t('Show sensitive data')}
           </TooltipContent>
         </Tooltip>
+        <DashboardProviderSelect
+          value={dashboardProvider}
+          onValueChange={setDashboardProvider}
+        />
         <ModelsFilter
           preferences={chartPreferences}
           currentFilters={modelFilters}
@@ -333,7 +327,14 @@ export function Dashboard() {
         />
       </>
     ) : null
-  const sectionActions = modelActions ?? flowActions
+  const userActions =
+    activeSection === 'users' ? (
+      <DashboardProviderSelect
+        value={dashboardProvider}
+        onValueChange={setDashboardProvider}
+      />
+    ) : null
+  const sectionActions = modelActions ?? flowActions ?? userActions
 
   return (
     <SectionPageLayout>
@@ -362,9 +363,7 @@ export function Dashboard() {
               )}
             </div>
           )}
-          {isOverviewSection && (
-            <OverviewDashboard provider={dashboardProvider} />
-          )}
+          {isOverviewSection && <OverviewDashboard provider='codex' />}
           {isModelsSection && (
             <>
               <FadeIn>
@@ -417,6 +416,7 @@ export function Dashboard() {
                 <LazyUserCharts
                   filters={userChartsFilters}
                   onFiltersChange={setUserChartsFilters}
+                  provider={dashboardProvider}
                 />
               </Suspense>
             </FadeIn>
@@ -427,6 +427,7 @@ export function Dashboard() {
                 <LazyFlowCharts
                   filters={modelFilters}
                   sensitiveVisible={flowSensitiveVisible}
+                  provider={dashboardProvider}
                 />
               </Suspense>
             </FadeIn>

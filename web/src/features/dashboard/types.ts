@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { TimeGranularity } from '@/lib/time'
 
+export type DashboardProvider = 'all' | 'codex' | 'claude'
+
 // ============================================================================
 // Quota & Usage Data Types
 // ============================================================================

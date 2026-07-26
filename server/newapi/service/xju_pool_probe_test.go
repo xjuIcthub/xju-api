@@ -1,10 +1,15 @@
 package service
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // xju-api:new — the probe classification table (号池验活 Part A). Every row is
@@ -70,4 +75,42 @@ func TestSubscriptionExpiredAt(t *testing.T) {
 	assert.False(t, subscriptionExpiredAt("2027-01-01T00:00:00Z", now))
 	assert.False(t, subscriptionExpiredAt("", now))
 	assert.False(t, subscriptionExpiredAt("garbage", now))
+}
+
+func TestClaudeProbeUsesNoInferenceModelsRequest(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		assert.Equal(t, "Bearer management-secret", r.Header.Get("Authorization"))
+
+		var request struct {
+			AuthIndex string            `json:"auth_index"`
+			Method    string            `json:"method"`
+			URL       string            `json:"url"`
+			Header    map[string]string `json:"header"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		assert.Equal(t, "claude-auth-index", request.AuthIndex)
+		assert.Equal(t, http.MethodGet, request.Method)
+		assert.Equal(t, claudeProbeURL, request.URL)
+		assert.Equal(t, "Bearer $TOKEN$", request.Header["Authorization"])
+		assert.Equal(t, "oauth-2025-04-20", request.Header["Anthropic-Beta"])
+		assert.Equal(t, "2023-06-01", request.Header["Anthropic-Version"])
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status_code":200,"body":"{}"}`))
+	}))
+	defer server.Close()
+
+	result := probeWithMgmt(
+		server.URL,
+		"management-secret",
+		probeTarget{Name: "claude.json", AuthIndex: "claude-auth-index"},
+		common.PoolProviderClaude,
+		true,
+	)
+
+	assert.Equal(t, 1, requestCount, "Claude ignores the Codex heavy-probe toggle")
+	assert.Equal(t, VerdictOnline, result.Verdict)
+	assert.Equal(t, http.StatusOK, result.HTTPCode)
 }

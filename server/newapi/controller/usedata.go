@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -29,9 +30,12 @@ func parseFlowQuotaTimeRange(c *gin.Context) (int64, int64, bool) {
 }
 
 func parseQuotaProvider(c *gin.Context) (string, bool) {
-	provider := c.Query("provider")
+	provider := strings.ToLower(strings.TrimSpace(c.Query("provider")))
 	if provider == "" {
 		return common.PoolProviderCodex, true
+	}
+	if provider == common.PoolProviderAll {
+		return common.PoolProviderAll, true
 	}
 	if !common.IsSupportedPoolProvider(provider) {
 		common.ApiErrorMsg(c, "invalid provider")

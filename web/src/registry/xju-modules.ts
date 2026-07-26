@@ -37,14 +37,14 @@ export const XJU_GENERAL_NAV_ITEMS = [
 /** 侧栏 personal 组注入项。共享池检测与私人池都面向当前登录用户。 */
 export const XJU_PERSONAL_NAV_ITEMS = [
   {
-    titleKey: 'Account Pool',
-    url: '/pool' as const,
-    icon: Boxes,
-  },
-  {
     titleKey: 'My Pool',
     url: '/my-pool' as const,
     icon: Box,
+  },
+  {
+    titleKey: 'All Pools',
+    url: '/pool' as const,
+    icon: Boxes,
   },
   {
     titleKey: 'Balance Recharge',
@@ -122,7 +122,7 @@ export const XJU_SIDEBAR_MODULE_META: Record<
   },
   personal: {
     pool: {
-      titleKey: 'Account Pool',
+      titleKey: 'All Pools',
       descriptionKey:
         'Inspect shared-pool accounts and run availability or quota checks.',
     },

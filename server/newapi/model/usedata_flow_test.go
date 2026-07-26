@@ -228,4 +228,14 @@ func TestQuotaDataSeparatesCodexAndClaudeProviders(t *testing.T) {
 	require.Len(t, claudeRows, 1)
 	assert.Equal(t, "claude-sonnet-4-5", claudeRows[0].ModelName)
 	assert.Equal(t, 250, claudeRows[0].Quota)
+
+	allRows, err := GetQuotaDataByUserIdForProvider(1, 3600, 7200, common.PoolProviderAll)
+	require.NoError(t, err)
+	require.Len(t, allRows, 2)
+	assert.Equal(t, 350, allRows[0].Quota+allRows[1].Quota)
+
+	flowRows, err := GetFlowQuotaDataForProvider(3600, 7200, "", 1, common.RoleCommonUser, common.PoolProviderAll)
+	require.NoError(t, err)
+	require.Len(t, flowRows, 2)
+	assert.Equal(t, 350, flowRows[0].Quota+flowRows[1].Quota)
 }

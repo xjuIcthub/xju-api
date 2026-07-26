@@ -29,6 +29,7 @@ import {
   getDefaultDays,
 } from '@/features/dashboard/lib'
 import type {
+  DashboardProvider,
   QuotaDataItem,
   DashboardFilters,
 } from '@/features/dashboard/types'
@@ -45,7 +46,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 interface LogStatCardsProps {
   filters?: DashboardFilters
-  provider?: 'codex' | 'claude'
+  provider?: DashboardProvider
   onDataUpdate?: (data: QuotaDataItem[], loading: boolean) => void
 }
 

@@ -21,7 +21,7 @@ import (
 // cliproxy's management api-call, which injects that account's own credential
 // (and proxy) and returns the upstream status.
 //
-// Probe endpoint (empirically confirmed against production):
+// Probe endpoints:
 //   - light: GET https://chatgpt.com/backend-api/codex/responses
 //     GET on a POST-only endpoint is method-checked AFTER auth, so a valid
 //     token returns 405 (Method Not Allowed) while a dead token returns 401 —
@@ -29,13 +29,18 @@ import (
 //   - heavy: POST the same endpoint with a minimal 1-token inference to confirm
 //     the account can actually run (catches quota exhaustion the light GET can't
 //     see). Opt-in "补测" — only run on light-verdict online accounts.
+//   - Claude: GET https://api.anthropic.com/v1/models?limit=1 using the selected
+//     OAuth credential. This is a no-inference request: 2xx means the token is
+//     accepted, while 401/403 means the credential is no longer usable.
 
 const (
-	codexProbeURL = "https://chatgpt.com/backend-api/codex/responses"
+	codexProbeURL  = "https://chatgpt.com/backend-api/codex/responses"
+	claudeProbeURL = "https://api.anthropic.com/v1/models?limit=1"
 	// The upstream gates codex on the tui client fingerprint; mirror it so a
 	// probe is treated like real codex traffic.
 	codexProbeUserAgent  = "codex-tui/0.135.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.135.0)"
 	codexProbeOriginator = "codex-tui"
+	claudeProbeUserAgent = "claude-cli/2.1.63 (external, cli)"
 )
 
 // ProbeVerdict is the classified health of one account.
@@ -118,9 +123,11 @@ type probeTarget struct {
 // online (to confirm quota). The pool is listed once to resolve the account's
 // auth_index + subscription window.
 func ProbeAuthByName(poolID, name string, heavy bool) (ProbeResult, error) {
-	if err := EnsurePoolProvider(poolID, common.PoolProviderCodex, "Codex account verification"); err != nil {
-		return ProbeResult{}, err
+	pool, ok := common.FindConfiguredPoolInfo(poolID)
+	if !ok {
+		return ProbeResult{}, fmt.Errorf("pool is not configured: %s", poolID)
 	}
+	provider := common.NormalizePoolProvider(pool.Provider)
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
 		return ProbeResult{}, fmt.Errorf("pool management is not configured for pool: %s", poolID)
@@ -135,13 +142,13 @@ func ProbeAuthByName(poolID, name string, heavy bool) (ProbeResult, error) {
 				Name: e.Name, AuthIndex: e.AuthIndex,
 				SubscriptionActiveUntil: e.IDToken.SubscriptionActiveUntil,
 			}
-			return probeWithMgmt(baseURL, secret, target, heavy), nil
+			return probeWithMgmt(baseURL, secret, target, provider, heavy), nil
 		}
 	}
 	return ProbeResult{}, fmt.Errorf("account not found in pool: %s", name)
 }
 
-func probeWithMgmt(baseURL, secret string, target probeTarget, heavy bool) ProbeResult {
+func probeWithMgmt(baseURL, secret string, target probeTarget, provider string, heavy bool) ProbeResult {
 	now := time.Now()
 	res := ProbeResult{Name: target.Name, AuthIndex: target.AuthIndex, At: now.Unix()}
 
@@ -151,7 +158,28 @@ func probeWithMgmt(baseURL, secret string, target probeTarget, heavy bool) Probe
 		return res
 	}
 
-	code, body := codexApiCall(baseURL, secret, target.AuthIndex, "GET", codexProbeURL, nil, "")
+	if provider == common.PoolProviderClaude {
+		code, body := poolCredentialAPICall(
+			baseURL,
+			secret,
+			target.AuthIndex,
+			"GET",
+			claudeProbeURL,
+			map[string]string{
+				"Accept":            "application/json",
+				"Anthropic-Beta":    "oauth-2025-04-20",
+				"Anthropic-Version": "2023-06-01",
+				"User-Agent":        claudeProbeUserAgent,
+				"X-App":             "cli",
+			},
+			"",
+		)
+		res.HTTPCode = code
+		res.Verdict, res.Detail = classifyProbe(false, code, body)
+		return res
+	}
+
+	code, body := poolCredentialAPICall(baseURL, secret, target.AuthIndex, "GET", codexProbeURL, nil, "")
 	res.HTTPCode = code
 	res.Verdict, res.Detail = classifyProbe(false, code, body)
 
@@ -172,11 +200,11 @@ func subscriptionExpiredAt(until string, now time.Time) bool {
 	return !t.IsZero() && t.Before(now)
 }
 
-// codexApiCall pins one request to `authIndex` via cliproxy's management
+// poolCredentialAPICall pins one request to `authIndex` via cliproxy's management
 // api-call and returns the UPSTREAM status code + body. `$TOKEN$` in the auth
 // header is substituted with the account's real credential by cliproxy. A
 // transport failure returns code 0 so the caller classifies it as unknown.
-func codexApiCall(baseURL, secret, authIndex, method, targetURL string, extraHeaders map[string]string, data string) (int, string) {
+func poolCredentialAPICall(baseURL, secret, authIndex, method, targetURL string, extraHeaders map[string]string, data string) (int, string) {
 	header := map[string]string{"Authorization": "Bearer $TOKEN$"}
 	for k, v := range extraHeaders {
 		header[k] = v
@@ -225,7 +253,7 @@ func codexHeavyProbe(baseURL, secret, authIndex string) (int, string, bool) {
 		`{"model":%q,"input":[{"role":"user","content":[{"type":"input_text","text":"ping"}]}],"stream":true,"store":false}`,
 		model,
 	)
-	code, respBody := codexApiCall(baseURL, secret, authIndex, "POST", codexProbeURL, map[string]string{
+	code, respBody := poolCredentialAPICall(baseURL, secret, authIndex, "POST", codexProbeURL, map[string]string{
 		"Content-Type": "application/json",
 		"User-Agent":   codexProbeUserAgent,
 		"originator":   codexProbeOriginator,
@@ -368,7 +396,7 @@ func runProbePoolJob(job *probeJob, poolID, baseURL, secret string, heavy, autoD
 		go func(t probeTarget) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			r := probeWithMgmt(baseURL, secret, t, heavy)
+			r := probeWithMgmt(baseURL, secret, t, common.PoolProviderCodex, heavy)
 			disabled := false
 			if autoDisable && r.Verdict.dead() {
 				if err := disablePoolEntry(baseURL, secret, t.Name); err == nil {

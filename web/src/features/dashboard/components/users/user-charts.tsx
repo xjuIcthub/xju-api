@@ -37,6 +37,7 @@ import {
   processUserChartData,
 } from '@/features/dashboard/lib'
 import type {
+  DashboardProvider,
   ProcessedUserChartData,
   UserChartsFilters,
 } from '@/features/dashboard/types'
@@ -69,6 +70,7 @@ const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
 interface UserChartsProps {
   filters: UserChartsFilters
   onFiltersChange: (filters: UserChartsFilters) => void
+  provider: DashboardProvider
 }
 
 export function UserCharts(props: UserChartsProps) {
@@ -137,8 +139,9 @@ export function UserCharts(props: UserChartsProps) {
   }, [resolvedTheme])
 
   const { data: userData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'user-quota', timeRange],
-    queryFn: () => getUserQuotaDataByUsers(timeRange),
+    queryKey: ['dashboard', 'user-quota', timeRange, props.provider],
+    queryFn: () =>
+      getUserQuotaDataByUsers({ ...timeRange, provider: props.provider }),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
   })

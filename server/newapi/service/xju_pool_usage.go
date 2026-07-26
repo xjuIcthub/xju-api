@@ -93,7 +93,7 @@ func fetchPoolAccountUsage(baseURL, secret string, e poolAuthEntry) PoolAccountU
 		u.Error = "account has no chatgpt_account_id"
 		return u
 	}
-	code, body := codexApiCall(baseURL, secret, e.AuthIndex, http.MethodGet, codexWhamUsageURL, poolWhamHeaders(accountID), "")
+	code, body := poolCredentialAPICall(baseURL, secret, e.AuthIndex, http.MethodGet, codexWhamUsageURL, poolWhamHeaders(accountID), "")
 	if code == 0 {
 		u.Error = "pool management unreachable"
 		return u
@@ -153,7 +153,7 @@ func consumePoolAccountReset(baseURL, secret, authIndex, accountID string) (int,
 	}
 	headers := poolWhamHeaders(accountID)
 	headers["Content-Type"] = "application/json"
-	code, body := codexApiCall(baseURL, secret, authIndex, http.MethodPost, codexWhamResetConsumeURL, headers, string(payload))
+	code, body := poolCredentialAPICall(baseURL, secret, authIndex, http.MethodPost, codexWhamResetConsumeURL, headers, string(payload))
 	if code == 0 {
 		return 0, "", fmt.Errorf("pool management unreachable")
 	}
