@@ -118,6 +118,9 @@ type probeTarget struct {
 // online (to confirm quota). The pool is listed once to resolve the account's
 // auth_index + subscription window.
 func ProbeAuthByName(poolID, name string, heavy bool) (ProbeResult, error) {
+	if err := EnsurePoolProvider(poolID, common.PoolProviderCodex, "Codex account verification"); err != nil {
+		return ProbeResult{}, err
+	}
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
 		return ProbeResult{}, fmt.Errorf("pool management is not configured for pool: %s", poolID)
@@ -311,6 +314,9 @@ var probeJobs sync.Map // poolID -> *probeJob
 func StartProbePoolJob(poolID string, heavy, autoDisable bool) (ProbeJobSnapshot, error) {
 	if !common.IsMasterNode {
 		return ProbeJobSnapshot{}, fmt.Errorf("verify-all runs on the master node only")
+	}
+	if err := EnsurePoolProvider(poolID, common.PoolProviderCodex, "Codex account verification"); err != nil {
+		return ProbeJobSnapshot{}, err
 	}
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {

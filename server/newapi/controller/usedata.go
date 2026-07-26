@@ -28,11 +28,27 @@ func parseFlowQuotaTimeRange(c *gin.Context) (int64, int64, bool) {
 	return startTimestamp, endTimestamp, true
 }
 
+func parseQuotaProvider(c *gin.Context) (string, bool) {
+	provider := c.Query("provider")
+	if provider == "" {
+		return common.PoolProviderCodex, true
+	}
+	if !common.IsSupportedPoolProvider(provider) {
+		common.ApiErrorMsg(c, "invalid provider")
+		return "", false
+	}
+	return common.NormalizePoolProvider(provider), true
+}
+
 func GetAllQuotaDates(c *gin.Context) {
+	provider, ok := parseQuotaProvider(c)
+	if !ok {
+		return
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	username := c.Query("username")
-	dates, err := model.GetAllQuotaDates(startTimestamp, endTimestamp, username)
+	dates, err := model.GetAllQuotaDatesForProvider(startTimestamp, endTimestamp, username, provider)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -46,9 +62,13 @@ func GetAllQuotaDates(c *gin.Context) {
 }
 
 func GetQuotaDatesByUser(c *gin.Context) {
+	provider, ok := parseQuotaProvider(c)
+	if !ok {
+		return
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp)
+	dates, err := model.GetQuotaDataGroupByUserForProvider(startTimestamp, endTimestamp, provider)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -61,6 +81,10 @@ func GetQuotaDatesByUser(c *gin.Context) {
 }
 
 func GetUserQuotaDates(c *gin.Context) {
+	provider, ok := parseQuotaProvider(c)
+	if !ok {
+		return
+	}
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -72,7 +96,7 @@ func GetUserQuotaDates(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetQuotaDataByUserId(userId, startTimestamp, endTimestamp)
+	dates, err := model.GetQuotaDataByUserIdForProvider(userId, startTimestamp, endTimestamp, provider)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -90,8 +114,12 @@ func GetAllFlowQuotaDates(c *gin.Context) {
 	if !ok {
 		return
 	}
+	provider, ok := parseQuotaProvider(c)
+	if !ok {
+		return
+	}
 	username := c.Query("username")
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, 0, c.GetInt("role"))
+	dates, err := model.GetFlowQuotaDataForProvider(startTimestamp, endTimestamp, username, 0, c.GetInt("role"), provider)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -110,6 +138,10 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 	if !ok {
 		return
 	}
+	provider, ok := parseQuotaProvider(c)
+	if !ok {
+		return
+	}
 	if endTimestamp-startTimestamp > 2592000 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -117,7 +149,7 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser)
+	dates, err := model.GetFlowQuotaDataForProvider(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser, provider)
 	if err != nil {
 		common.ApiError(c, err)
 		return

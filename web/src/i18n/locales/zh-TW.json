@@ -5528,6 +5528,21 @@
     "Your upstream accounts, routing channel, and API keys will be isolated from every other user.": "Your upstream accounts, routing channel, and API keys will be isolated from every other user.",
     "Login, upload, paste JSON, or import a ZIP.": "Login, upload, paste JSON, or import a ZIP.",
     "Create API key": "Create API key",
-    "New keys route only to your private pool.": "New keys route only to your private pool."
+    "New keys route only to your private pool.": "New keys route only to your private pool.",
+    "Overview (Claude)": "Overview (Claude)",
+    "Dashboard (Claude)": "Dashboard (Claude)",
+    "Upstream Claude accounts behind the shared pool.": "Upstream Claude accounts behind the shared pool.",
+    "Upstream Codex / GPT / OpenAI accounts behind the shared pool.": "Upstream Codex / GPT / OpenAI accounts behind the shared pool.",
+    "Claude accounts are imported only through the secure Anthropic OAuth login.": "Claude accounts are imported only through the secure Anthropic OAuth login.",
+    "CPA (Codex)": "CPA (Codex)",
+    "CPA (Claude)": "CPA (Claude)",
+    "go-pool": "go-pool",
+    "Pool type": "Pool type",
+    "Login with {{provider}}": "Login with {{provider}}",
+    "Credentials and MFA stay with {{provider}}. This page only receives the one-time localhost callback.": "Credentials and MFA stay with {{provider}}. This page only receives the one-time localhost callback.",
+    "Open the {{provider}} login page": "Open the {{provider}} login page",
+    "Complete login in the new tab. It will automatically redirect to the localhost callback.": "Complete login in the new tab. It will automatically redirect to the localhost callback.",
+    "Open {{provider}} login": "Open {{provider}} login",
+    "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.": "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts."
   }
 }

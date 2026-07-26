@@ -37,12 +37,20 @@ const { createPool } = await import('./api')
 describe('createPool', () => {
   test('T3.7 sends explicit mode', async () => {
     calls.length = 0
-    await createPool('Edu', 'gopool')
-    expect(calls[0].body).toEqual({ label: 'Edu', mode: 'gopool' })
+    await createPool('Edu', 'codex', 'gopool')
+    expect(calls[0].body).toEqual({
+      label: 'Edu',
+      provider: 'codex',
+      mode: 'gopool',
+    })
   })
   test('T3.7 defaults mode to cliproxy', async () => {
     calls.length = 0
-    await createPool('Edu')
-    expect(calls[0].body).toEqual({ label: 'Edu', mode: 'cliproxy' })
+    await createPool('Edu', 'claude')
+    expect(calls[0].body).toEqual({
+      label: 'Edu',
+      provider: 'claude',
+      mode: 'cliproxy',
+    })
   })
 })

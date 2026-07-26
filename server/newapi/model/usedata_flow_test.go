@@ -1,9 +1,11 @@
 package model
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,4 +192,40 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, 60, rows[0].TokenUsed)
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
+}
+
+func TestQuotaDataSeparatesCodexAndClaudeProviders(t *testing.T) {
+	truncateTables(t)
+	registryPath := filepath.Join(t.TempDir(), "pools.json")
+	t.Setenv("POOL_REGISTRY_FILE", registryPath)
+	require.NoError(t, common.SavePoolRegistry([]common.PoolEntry{{
+		ID: "claude", Label: "Claude", Provider: common.PoolProviderClaude,
+		MgmtURL: "http://claude:8319", MgmtSecret: "secret", ChannelID: 77,
+		Kind: common.PoolKindAdmin, GroupKey: "claude-group",
+	}}))
+
+	CacheQuotaDataLock.Lock()
+	CacheQuotaData = make(map[string]*QuotaData)
+	CacheQuotaDataLock.Unlock()
+	LogQuotaData(QuotaDataLogParams{
+		UserID: 1, Username: "alice", ModelName: "gpt-5", CreatedAt: 3661,
+		UseGroup: "default", ChannelID: 1, Quota: 100, TokenUsed: 10,
+	})
+	LogQuotaData(QuotaDataLogParams{
+		UserID: 1, Username: "alice", ModelName: "claude-sonnet-4-5", CreatedAt: 3661,
+		UseGroup: "claude-group", ChannelID: 77, Quota: 250, TokenUsed: 20,
+	})
+	SaveQuotaDataCache()
+
+	codexRows, err := GetQuotaDataByUserIdForProvider(1, 3600, 7200, common.PoolProviderCodex)
+	require.NoError(t, err)
+	require.Len(t, codexRows, 1)
+	assert.Equal(t, "gpt-5", codexRows[0].ModelName)
+	assert.Equal(t, 100, codexRows[0].Quota)
+
+	claudeRows, err := GetQuotaDataByUserIdForProvider(1, 3600, 7200, common.PoolProviderClaude)
+	require.NoError(t, err)
+	require.Len(t, claudeRows, 1)
+	assert.Equal(t, "claude-sonnet-4-5", claudeRows[0].ModelName)
+	assert.Equal(t, 250, claudeRows[0].Quota)
 }

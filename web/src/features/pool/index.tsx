@@ -66,13 +66,13 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   addPoolAuthFile,
-  cancelPoolCodexLogin,
+  cancelPoolLogin,
   cleanPoolAuthFilesNow,
   createPool,
   deletePool,
   deletePoolAuthFile,
   deriveAuthFileName,
-  getPoolCodexLoginStatus,
+  getPoolLoginStatus,
   getPoolCreateStatus,
   getPoolUsage,
   getVerifyProgress,
@@ -84,10 +84,10 @@ import {
   renamePool,
   resetPoolAccountQuota,
   setPoolAuthFileDisabled,
-  startPoolCodexLogin,
+  startPoolLogin,
   startPoolUsageRefreshAll,
   startVerifyAll,
-  submitPoolCodexCallback,
+  submitPoolLoginCallback,
   verifyPoolAuthFile,
   type ImportResult,
   type PoolAuthFile,
@@ -113,9 +113,12 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 function poolDisplayLabel(pool: PoolInfo): string {
-  if (pool.kind !== 'private') return pool.label
+  const provider = pool.provider === 'claude' ? 'Claude' : 'Codex'
+  if (pool.kind !== 'private') return `${pool.label} · ${provider}`
   return `@${pool.owner_username || pool.owner_user_id || pool.id}`
 }
+
+type NewPoolType = 'cpa-codex' | 'cpa-claude' | 'gopool'
 
 export function Pool() {
   const { t } = useTranslation()
@@ -133,7 +136,7 @@ export function Pool() {
   // xju-api:new — one-click pool creation + deletion (#4 Phase D).
   const [createOpen, setCreateOpen] = useState(false)
   const [newLabel, setNewLabel] = useState('')
-  const [newMode, setNewMode] = useState<'cliproxy' | 'gopool'>('cliproxy')
+  const [newPoolType, setNewPoolType] = useState<NewPoolType>('cpa-codex')
   const [creatingId, setCreatingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PoolInfo | null>(null)
   // xju-api:new — pool rename (display label + its channel display name).
@@ -155,13 +158,17 @@ export function Pool() {
     staleTime: 60_000,
   })
   const pools: PoolInfo[] = poolsQuery.data ?? [
-    { id: 'default', label: 'Default' },
+    { id: 'default', label: 'Default', provider: 'codex' },
   ]
   // xju-api:new — dual build modes (③). The active pool's build_mode only
   // steers UI guidance (import copy); the backend treats both modes alike.
   const activeBuildMode =
     pools.find((p) => p.id === pool)?.build_mode ?? 'cliproxy'
   const activePool = pools.find((p) => p.id === pool)
+  const activeProvider = activePool?.provider === 'claude' ? 'claude' : 'codex'
+  const isCodexPool = activeProvider === 'codex'
+  const activeProviderBrand =
+    activeProvider === 'claude' ? 'Claude · Anthropic' : 'Codex · GPT · OpenAI'
 
   // xju-api:new — the initial selection ('default') is only a pre-load
   // placeholder; the env-seeded default/k12 pools can be retired in favour of
@@ -292,7 +299,7 @@ export function Pool() {
   const usageQuery = useQuery({
     queryKey: ['pool', 'usage', pool],
     queryFn: () => getPoolUsage(pool),
-    enabled: poolConfigured,
+    enabled: poolConfigured && isCodexPool,
     // Poll while a whole-pool refresh is running; otherwise the cache is stable.
     refetchInterval: (query) => (query.state.data?.job?.running ? 3000 : false),
   })
@@ -350,7 +357,7 @@ export function Pool() {
   const progressQuery = useQuery({
     queryKey: ['pool', 'verify', pool],
     queryFn: () => getVerifyProgress(pool),
-    enabled: canManage && poolConfigured,
+    enabled: canManage && poolConfigured && isCodexPool,
     // Poll while a run is in flight; otherwise leave the last snapshot in place.
     refetchInterval: (query) => (query.state.data?.running ? 2000 : false),
   })
@@ -382,7 +389,11 @@ export function Pool() {
   // xju-api:new — create a pool, then poll provisioning until it's ready and
   // switch to its tab.
   const createMutation = useMutation({
-    mutationFn: () => createPool(newLabel.trim(), newMode),
+    mutationFn: () => {
+      const provider = newPoolType === 'cpa-claude' ? 'claude' : 'codex'
+      const mode = newPoolType === 'gopool' ? 'gopool' : 'cliproxy'
+      return createPool(newLabel.trim(), provider, mode)
+    },
     onSuccess: (res) => setCreatingId(res.pool_id),
     onError: (error: Error) => toast.error(error.message),
   })
@@ -402,7 +413,7 @@ export function Pool() {
       setCreatingId(null)
       setCreateOpen(false)
       setNewLabel('')
-      setNewMode('cliproxy')
+      setNewPoolType('cpa-codex')
       queryClient.invalidateQueries({ queryKey: ['pool', 'pools'] })
       setPool(id)
       toast.success(t('Pool created — now import accounts into it'))
@@ -479,12 +490,40 @@ export function Pool() {
   let accessLabel = t('Read-only')
   if (canManage) accessLabel = t('Admin')
   if (role >= ROLE.SUPER_ADMIN) accessLabel = t('Root')
+  let poolDescription = t(
+    'Upstream Codex / GPT / OpenAI accounts behind the shared pool.'
+  )
+  if (activeProvider === 'claude') {
+    poolDescription = t('Upstream Claude accounts behind the shared pool.')
+  }
+  if (activePool?.kind === 'private') {
+    const owner = activePool.owner_username
+      ? `@${activePool.owner_username}`
+      : `#${activePool.owner_user_id}`
+    poolDescription = t('Private pool owned by {{owner}}.', { owner })
+  }
+  let addAccountDescription = t(
+    'Enriched login → paste the codex auth JSON. Bulk .zip import also works. The pool reloads instantly.'
+  )
+  if (activeBuildMode === 'gopool') {
+    addAccountDescription = t(
+      'Bulk import a .zip of many accounts, or paste a single codex auth JSON. The pool reloads instantly.'
+    )
+  }
+  if (activeProvider === 'claude') {
+    addAccountDescription = t(
+      'Claude accounts are imported only through the secure Anthropic OAuth login.'
+    )
+  }
 
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
         <span className='inline-flex min-w-0 items-center gap-2'>
           <span className='truncate'>{t('Account Pool')}</span>
+          <Badge variant='secondary' className='shrink-0'>
+            {activeProviderBrand}
+          </Badge>
           <Badge variant='outline' className='shrink-0'>
             {accessLabel}
           </Badge>
@@ -525,9 +564,13 @@ export function Pool() {
       <SectionPageLayout.Content>
         {!canManage && (
           <div className='border-border bg-muted/40 text-muted-foreground mb-4 rounded-md border px-4 py-3 text-sm'>
-            {t(
-              'Shared pools are read-only for regular users. You can only test account availability and check quota; use My Pool to manage your own accounts.'
-            )}
+            {activeProvider === 'claude'
+              ? t(
+                  'Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.'
+                )
+              : t(
+                  'Shared pools are read-only for regular users. You can only test account availability and check quota; use My Pool to manage your own accounts.'
+                )}
           </div>
         )}
         <div
@@ -544,15 +587,7 @@ export function Pool() {
                 <CardTitle className='text-base'>
                   {t('Accounts in pool')}
                 </CardTitle>
-                <CardDescription>
-                  {activePool?.kind === 'private'
-                    ? t('Private pool owned by {{owner}}.', {
-                        owner: activePool.owner_username
-                          ? `@${activePool.owner_username}`
-                          : `#${activePool.owner_user_id}`,
-                      })
-                    : t('Upstream codex accounts behind the shared pool.')}
-                </CardDescription>
+                <CardDescription>{poolDescription}</CardDescription>
               </div>
               {/* xju-api:edit — stats + actions live on the card's right,
                   balancing the title/description on the left. Stats are three
@@ -681,7 +716,7 @@ export function Pool() {
                                 variant={meta.variant}
                                 copyable={false}
                               />
-                              {plan && (
+                              {isCodexPool && plan && (
                                 <Badge
                                   variant='outline'
                                   className='shrink-0 uppercase'
@@ -689,7 +724,7 @@ export function Pool() {
                                   {plan}
                                 </Badge>
                               )}
-                              {verdictMeta && (
+                              {isCodexPool && verdictMeta && (
                                 <StatusBadge
                                   label={`✓ ${t(verdictMeta.labelKey)}`}
                                   variant={verdictMeta.variant}
@@ -701,7 +736,7 @@ export function Pool() {
                               {file.name}
                             </p>
                             <div className='text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs'>
-                              {subUntil && (
+                              {isCodexPool && subUntil && (
                                 <span
                                   className={
                                     state === 'expired'
@@ -737,7 +772,7 @@ export function Pool() {
                                   })}
                                 </span>
                               )}
-                              {usage && !usage.error && (
+                              {isCodexPool && usage && !usage.error && (
                                 <>
                                   {usage.five_hour_used_percent != null && (
                                     <span
@@ -790,51 +825,57 @@ export function Pool() {
                             </div>
                           </div>
                           <div className='flex shrink-0 items-center gap-1'>
-                            <Button
-                              type='button'
-                              variant='ghost'
-                              size='icon-sm'
-                              aria-label={t('Verify')}
-                              title={t('Verify now')}
-                              onClick={() => verifyMutation.mutate(file.name)}
-                              disabled={verifyMutation.isPending}
-                            >
-                              {verifyingName === file.name ? (
-                                <Loader2 className='size-4 animate-spin' />
-                              ) : (
-                                <Activity className='size-4' />
-                              )}
-                            </Button>
-                            <Button
-                              type='button'
-                              variant='ghost'
-                              size='icon-sm'
-                              aria-label={t('Refresh quota')}
-                              title={t('Refresh quota')}
-                              onClick={() =>
-                                refreshUsageMutation.mutate(file.name)
-                              }
-                              disabled={refreshUsageMutation.isPending}
-                            >
-                              {refreshingUsageName === file.name ? (
-                                <Loader2 className='size-4 animate-spin' />
-                              ) : (
-                                <Gauge className='size-4' />
-                              )}
-                            </Button>
-                            {canManage && (usage?.reset_credits ?? 0) > 0 && (
+                            {isCodexPool && (
                               <Button
                                 type='button'
                                 variant='ghost'
                                 size='icon-sm'
-                                aria-label={t('Reset quota')}
-                                title={t('Reset quota')}
-                                onClick={() => setResetQuotaTarget(file)}
-                                disabled={resetQuotaMutation.isPending}
+                                aria-label={t('Verify')}
+                                title={t('Verify now')}
+                                onClick={() => verifyMutation.mutate(file.name)}
+                                disabled={verifyMutation.isPending}
                               >
-                                <RotateCcw className='size-4' />
+                                {verifyingName === file.name ? (
+                                  <Loader2 className='size-4 animate-spin' />
+                                ) : (
+                                  <Activity className='size-4' />
+                                )}
                               </Button>
                             )}
+                            {isCodexPool && (
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='icon-sm'
+                                aria-label={t('Refresh quota')}
+                                title={t('Refresh quota')}
+                                onClick={() =>
+                                  refreshUsageMutation.mutate(file.name)
+                                }
+                                disabled={refreshUsageMutation.isPending}
+                              >
+                                {refreshingUsageName === file.name ? (
+                                  <Loader2 className='size-4 animate-spin' />
+                                ) : (
+                                  <Gauge className='size-4' />
+                                )}
+                              </Button>
+                            )}
+                            {isCodexPool &&
+                              canManage &&
+                              (usage?.reset_credits ?? 0) > 0 && (
+                                <Button
+                                  type='button'
+                                  variant='ghost'
+                                  size='icon-sm'
+                                  aria-label={t('Reset quota')}
+                                  title={t('Reset quota')}
+                                  onClick={() => setResetQuotaTarget(file)}
+                                  disabled={resetQuotaMutation.isPending}
+                                >
+                                  <RotateCcw className='size-4' />
+                                </Button>
+                              )}
                             <Button
                               type='button'
                               variant='ghost'
@@ -887,95 +928,110 @@ export function Pool() {
             <Card data-card-hover='false'>
               <CardHeader>
                 <CardTitle className='text-base'>{t('Add account')}</CardTitle>
-                <CardDescription>
-                  {activeBuildMode === 'gopool'
-                    ? t(
-                        'Bulk import a .zip of many accounts, or paste a single codex auth JSON. The pool reloads instantly.'
-                      )
-                    : t(
-                        'Enriched login → paste the codex auth JSON. Bulk .zip import also works. The pool reloads instantly.'
-                      )}
-                </CardDescription>
+                <CardDescription>{addAccountDescription}</CardDescription>
               </CardHeader>
               <CardContent className='grid gap-2'>
                 <div className='flex flex-wrap justify-end gap-2'>
-                  <input
-                    ref={zipInputRef}
-                    type='file'
-                    accept='.zip'
-                    className='hidden'
-                    onChange={handleZipImport}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type='file'
-                    accept='.json,application/json'
-                    className='hidden'
-                    onChange={handleFileUpload}
-                  />
+                  {isCodexPool && (
+                    <>
+                      <input
+                        ref={zipInputRef}
+                        type='file'
+                        accept='.zip'
+                        className='hidden'
+                        onChange={handleZipImport}
+                      />
+                      <input
+                        ref={fileInputRef}
+                        type='file'
+                        accept='.json,application/json'
+                        className='hidden'
+                        onChange={handleFileUpload}
+                      />
+                    </>
+                  )}
                   <CodexLoginButton
-                    key={pool}
+                    key={`${pool}-${activeProvider}`}
+                    provider={activeProvider}
                     scopeKey={['root', pool]}
-                    startLogin={() => startPoolCodexLogin(pool)}
-                    submitCallback={submitPoolCodexCallback}
-                    getStatus={getPoolCodexLoginStatus}
-                    cancelLogin={cancelPoolCodexLogin}
+                    startLogin={() => startPoolLogin(pool, activeProvider)}
+                    submitCallback={(sessionId, redirectUrl) =>
+                      submitPoolLoginCallback(
+                        activeProvider,
+                        sessionId,
+                        redirectUrl
+                      )
+                    }
+                    getStatus={(sessionId) =>
+                      getPoolLoginStatus(activeProvider, sessionId)
+                    }
+                    cancelLogin={(sessionId) =>
+                      cancelPoolLogin(activeProvider, sessionId)
+                    }
                     onComplete={invalidate}
                     disabled={!poolConfigured}
                   />
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='sm'
-                    onClick={() => zipInputRef.current?.click()}
-                    disabled={importMutation.isPending}
-                  >
-                    {importMutation.isPending ? (
-                      <Loader2 className='animate-spin' />
-                    ) : (
-                      <FileArchive />
-                    )}
-                    {t('Import .zip')}
-                  </Button>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='sm'
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload />
-                    {t('Upload')}
-                  </Button>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='sm'
-                    onClick={handlePaste}
-                  >
-                    <ClipboardPaste />
-                    {t('Paste')}
-                  </Button>
-                </div>
-                <Textarea
-                  value={content}
-                  onChange={(event) => setContent(event.target.value)}
-                  placeholder='{ "email": "...", "OPENAI_API_KEY": "..." }'
-                  className='h-36 font-mono text-xs'
-                  spellCheck={false}
-                />
-                <Button
-                  type='button'
-                  onClick={() => addMutation.mutate()}
-                  disabled={addMutation.isPending || !content.trim()}
-                >
-                  {addMutation.isPending ? (
-                    <Loader2 className='animate-spin' />
-                  ) : (
-                    <Plus />
+                  {isCodexPool && (
+                    <>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        onClick={() => zipInputRef.current?.click()}
+                        disabled={importMutation.isPending}
+                      >
+                        {importMutation.isPending ? (
+                          <Loader2 className='animate-spin' />
+                        ) : (
+                          <FileArchive />
+                        )}
+                        {t('Import .zip')}
+                      </Button>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload />
+                        {t('Upload')}
+                      </Button>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        onClick={handlePaste}
+                      >
+                        <ClipboardPaste />
+                        {t('Paste')}
+                      </Button>
+                    </>
                   )}
-                  {t('Add to pool')}
-                </Button>
-                {importResult && (
+                </div>
+                {isCodexPool && (
+                  <>
+                    <Textarea
+                      value={content}
+                      onChange={(event) => setContent(event.target.value)}
+                      placeholder='{ "email": "...", "OPENAI_API_KEY": "..." }'
+                      className='h-36 font-mono text-xs'
+                      spellCheck={false}
+                    />
+                    <Button
+                      type='button'
+                      onClick={() => addMutation.mutate()}
+                      disabled={addMutation.isPending || !content.trim()}
+                    >
+                      {addMutation.isPending ? (
+                        <Loader2 className='animate-spin' />
+                      ) : (
+                        <Plus />
+                      )}
+                      {t('Add to pool')}
+                    </Button>
+                  </>
+                )}
+                {isCodexPool && importResult && (
                   <div className='border-border mt-1 rounded-md border p-2 text-xs'>
                     <p className='font-medium'>
                       {t(
@@ -1057,200 +1113,204 @@ export function Pool() {
 
             {/* xju-api:new — per-account quota (号池额度): whole-pool refresh +
                 auto-refresh / auto-reset toggles. */}
-            <Card data-card-hover='false'>
-              <CardHeader>
-                <CardTitle className='flex items-center gap-1.5 text-base'>
-                  <Gauge className='size-4' />
-                  {t('Account quota')}
-                </CardTitle>
-                <CardDescription>
-                  {t(
-                    'Per-account ChatGPT usage windows (5h / weekly) and reset credits.'
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='grid gap-3'>
-                <div className='flex items-start justify-between gap-3'>
-                  <div className='min-w-0'>
-                    <span className='text-sm font-medium'>
-                      {t('Auto refresh hourly')}
-                    </span>
-                    <p className='text-muted-foreground text-xs'>
-                      {t(
-                        'Fetch every account’s quota in the background, once an hour.'
-                      )}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={usageAutoRefreshEnabled}
-                    disabled={optionMutation.isPending}
-                    onCheckedChange={(v) =>
-                      optionMutation.mutate({
-                        key: 'PoolUsageAutoRefreshEnabled',
-                        value: String(v),
-                      })
-                    }
-                  />
-                </div>
-                <div className='flex items-start justify-between gap-3'>
-                  <div className='min-w-0'>
-                    <span className='text-sm font-medium'>
-                      {t('Auto reset when exhausted')}
-                    </span>
-                    <p className='text-muted-foreground text-xs'>
-                      {t(
-                        'Spend one reset credit automatically when an account runs out of quota.'
-                      )}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={usageAutoResetEnabled}
-                    disabled={optionMutation.isPending}
-                    onCheckedChange={(v) =>
-                      optionMutation.mutate({
-                        key: 'PoolUsageAutoResetEnabled',
-                        value: String(v),
-                      })
-                    }
-                  />
-                </div>
-                <Button
-                  type='button'
-                  onClick={() => refreshAllUsageMutation.mutate()}
-                  disabled={
-                    refreshAllUsageMutation.isPending ||
-                    Boolean(usageJob?.running)
-                  }
-                >
-                  {usageJob?.running ? (
-                    <Loader2 className='animate-spin' />
-                  ) : (
-                    <Gauge />
-                  )}
-                  {t('Refresh all quota')}
-                </Button>
-                <p className='text-muted-foreground text-xs'>
-                  {t(
-                    'Only exhausted or unknown accounts are fetched; accounts with quota left are skipped.'
-                  )}
-                </p>
-                {usageJob && (usageJob.running || usageJob.done > 0) && (
-                  <div className='border-border rounded-md border p-2 text-xs'>
-                    {usageJob.running ? (
-                      <p>
-                        {t('Refreshing quota {{done}}/{{total}}...', {
-                          done: usageJob.done,
-                          total: usageJob.total,
-                        })}
-                      </p>
-                    ) : (
-                      <p className='font-medium'>
+            {isCodexPool && (
+              <Card data-card-hover='false'>
+                <CardHeader>
+                  <CardTitle className='flex items-center gap-1.5 text-base'>
+                    <Gauge className='size-4' />
+                    {t('Account quota')}
+                  </CardTitle>
+                  <CardDescription>
+                    {t(
+                      'Per-account ChatGPT usage windows (5h / weekly) and reset credits.'
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className='grid gap-3'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <span className='text-sm font-medium'>
+                        {t('Auto refresh hourly')}
+                      </span>
+                      <p className='text-muted-foreground text-xs'>
                         {t(
-                          'Quota refreshed {{total}} · skipped {{skipped}} · auto-reset {{resets}} · failed {{errors}}',
-                          {
-                            total: usageJob.total,
-                            skipped: usageJob.skipped,
-                            resets: usageJob.resets,
-                            errors: usageJob.errors,
-                          }
+                          'Fetch every account’s quota in the background, once an hour.'
                         )}
                       </p>
-                    )}
+                    </div>
+                    <Switch
+                      checked={usageAutoRefreshEnabled}
+                      disabled={optionMutation.isPending}
+                      onCheckedChange={(v) =>
+                        optionMutation.mutate({
+                          key: 'PoolUsageAutoRefreshEnabled',
+                          value: String(v),
+                        })
+                      }
+                    />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* xju-api:new — active verification (号池验活 Part A) */}
-            <Card data-card-hover='false'>
-              <CardHeader>
-                <CardTitle className='flex items-center gap-1.5 text-base'>
-                  <ShieldCheck className='size-4' />
-                  {t('Verify accounts')}
-                </CardTitle>
-                <CardDescription>
-                  {t(
-                    'Probe each account live to confirm it is actually online, instead of trusting the passive status.'
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='grid gap-3'>
-                <div className='flex items-start justify-between gap-3'>
-                  <div className='min-w-0'>
-                    <span className='text-sm font-medium'>
-                      {t('Deep probe')}
-                    </span>
-                    <p className='text-muted-foreground text-xs'>
-                      {t(
-                        'Also run a tiny inference to catch quota-exhausted accounts (uses a little quota).'
-                      )}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={heavyProbe}
-                    onCheckedChange={setHeavyProbe}
-                    disabled={jobRunning}
-                  />
-                </div>
-                <div className='flex items-start justify-between gap-3'>
-                  <div className='min-w-0'>
-                    <span className='text-sm font-medium'>
-                      {t('Auto-disable dead')}
-                    </span>
-                    <p className='text-muted-foreground text-xs'>
-                      {t(
-                        'Disable accounts found credential-dead or subscription-expired.'
-                      )}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={autoDisable}
-                    onCheckedChange={setAutoDisable}
-                    disabled={jobRunning}
-                  />
-                </div>
-                <Button
-                  type='button'
-                  onClick={() => verifyAllMutation.mutate()}
-                  disabled={verifyAllMutation.isPending || jobRunning}
-                >
-                  {jobRunning ? (
-                    <Loader2 className='animate-spin' />
-                  ) : (
-                    <ShieldCheck />
-                  )}
-                  {t('Verify all')}
-                </Button>
-                {progress && (progress.running || progress.done > 0) && (
-                  <div className='border-border rounded-md border p-2 text-xs'>
-                    {progress.running ? (
-                      <p>
-                        {t('Verifying {{done}}/{{total}}...', {
-                          done: progress.done,
-                          total: progress.total,
-                        })}
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <span className='text-sm font-medium'>
+                        {t('Auto reset when exhausted')}
+                      </span>
+                      <p className='text-muted-foreground text-xs'>
+                        {t(
+                          'Spend one reset credit automatically when an account runs out of quota.'
+                        )}
                       </p>
+                    </div>
+                    <Switch
+                      checked={usageAutoResetEnabled}
+                      disabled={optionMutation.isPending}
+                      onCheckedChange={(v) =>
+                        optionMutation.mutate({
+                          key: 'PoolUsageAutoResetEnabled',
+                          value: String(v),
+                        })
+                      }
+                    />
+                  </div>
+                  <Button
+                    type='button'
+                    onClick={() => refreshAllUsageMutation.mutate()}
+                    disabled={
+                      refreshAllUsageMutation.isPending ||
+                      Boolean(usageJob?.running)
+                    }
+                  >
+                    {usageJob?.running ? (
+                      <Loader2 className='animate-spin' />
                     ) : (
-                      <p className='font-medium'>
-                        {t('Verified {{total}} · disabled {{disabled}}', {
-                          total: progress.total,
-                          disabled: progress.disabled,
-                        })}
-                      </p>
+                      <Gauge />
                     )}
-                    <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5'>
-                      {verdictBreakdown(progress.results ?? []).map(
-                        ([verdict, count]) => (
-                          <span key={verdict}>
-                            {t(VERDICT_META[verdict].labelKey)}: {count}
-                          </span>
-                        )
+                    {t('Refresh all quota')}
+                  </Button>
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      'Only exhausted or unknown accounts are fetched; accounts with quota left are skipped.'
+                    )}
+                  </p>
+                  {usageJob && (usageJob.running || usageJob.done > 0) && (
+                    <div className='border-border rounded-md border p-2 text-xs'>
+                      {usageJob.running ? (
+                        <p>
+                          {t('Refreshing quota {{done}}/{{total}}...', {
+                            done: usageJob.done,
+                            total: usageJob.total,
+                          })}
+                        </p>
+                      ) : (
+                        <p className='font-medium'>
+                          {t(
+                            'Quota refreshed {{total}} · skipped {{skipped}} · auto-reset {{resets}} · failed {{errors}}',
+                            {
+                              total: usageJob.total,
+                              skipped: usageJob.skipped,
+                              resets: usageJob.resets,
+                              errors: usageJob.errors,
+                            }
+                          )}
+                        </p>
                       )}
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* xju-api:new — active verification (号池验活 Part A) */}
+            {isCodexPool && (
+              <Card data-card-hover='false'>
+                <CardHeader>
+                  <CardTitle className='flex items-center gap-1.5 text-base'>
+                    <ShieldCheck className='size-4' />
+                    {t('Verify accounts')}
+                  </CardTitle>
+                  <CardDescription>
+                    {t(
+                      'Probe each account live to confirm it is actually online, instead of trusting the passive status.'
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className='grid gap-3'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <span className='text-sm font-medium'>
+                        {t('Deep probe')}
+                      </span>
+                      <p className='text-muted-foreground text-xs'>
+                        {t(
+                          'Also run a tiny inference to catch quota-exhausted accounts (uses a little quota).'
+                        )}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={heavyProbe}
+                      onCheckedChange={setHeavyProbe}
+                      disabled={jobRunning}
+                    />
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <span className='text-sm font-medium'>
+                        {t('Auto-disable dead')}
+                      </span>
+                      <p className='text-muted-foreground text-xs'>
+                        {t(
+                          'Disable accounts found credential-dead or subscription-expired.'
+                        )}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={autoDisable}
+                      onCheckedChange={setAutoDisable}
+                      disabled={jobRunning}
+                    />
+                  </div>
+                  <Button
+                    type='button'
+                    onClick={() => verifyAllMutation.mutate()}
+                    disabled={verifyAllMutation.isPending || jobRunning}
+                  >
+                    {jobRunning ? (
+                      <Loader2 className='animate-spin' />
+                    ) : (
+                      <ShieldCheck />
+                    )}
+                    {t('Verify all')}
+                  </Button>
+                  {progress && (progress.running || progress.done > 0) && (
+                    <div className='border-border rounded-md border p-2 text-xs'>
+                      {progress.running ? (
+                        <p>
+                          {t('Verifying {{done}}/{{total}}...', {
+                            done: progress.done,
+                            total: progress.total,
+                          })}
+                        </p>
+                      ) : (
+                        <p className='font-medium'>
+                          {t('Verified {{total}} · disabled {{disabled}}', {
+                            total: progress.total,
+                            disabled: progress.disabled,
+                          })}
+                        </p>
+                      )}
+                      <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5'>
+                        {verdictBreakdown(progress.results ?? []).map(
+                          ([verdict, count]) => (
+                            <span key={verdict}>
+                              {t(VERDICT_META[verdict].labelKey)}: {count}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 
@@ -1264,7 +1324,7 @@ export function Pool() {
               setCreateOpen(o)
               if (!o) {
                 setNewLabel('')
-                setNewMode('cliproxy')
+                setNewPoolType('cpa-codex')
               }
             }
           }}
@@ -1292,24 +1352,32 @@ export function Pool() {
           </div>
           <div className='grid gap-1'>
             <label className='text-muted-foreground text-xs'>
-              {t('Build mode')}
+              {t('Pool type')}
             </label>
-            <div className='flex gap-2'>
+            <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
               <Button
                 type='button'
-                variant={newMode === 'cliproxy' ? 'default' : 'outline'}
+                variant={newPoolType === 'cpa-codex' ? 'default' : 'outline'}
                 disabled={!!creatingId}
-                onClick={() => setNewMode('cliproxy')}
+                onClick={() => setNewPoolType('cpa-codex')}
               >
-                {t('CLIProxy enriched login')}
+                {t('CPA (Codex)')}
               </Button>
               <Button
                 type='button'
-                variant={newMode === 'gopool' ? 'default' : 'outline'}
+                variant={newPoolType === 'cpa-claude' ? 'default' : 'outline'}
                 disabled={!!creatingId}
-                onClick={() => setNewMode('gopool')}
+                onClick={() => setNewPoolType('cpa-claude')}
               >
-                {t('go-pool bulk')}
+                {t('CPA (Claude)')}
+              </Button>
+              <Button
+                type='button'
+                variant={newPoolType === 'gopool' ? 'default' : 'outline'}
+                disabled={!!creatingId}
+                onClick={() => setNewPoolType('gopool')}
+              >
+                {t('go-pool')}
               </Button>
             </div>
           </div>

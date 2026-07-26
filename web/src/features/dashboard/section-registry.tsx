@@ -35,6 +35,16 @@ const DASHBOARD_SECTIONS = [
     build: () => null,
   },
   {
+    id: 'overview-claude',
+    titleKey: 'Overview (Claude)',
+    build: () => null,
+  },
+  {
+    id: 'models-claude',
+    titleKey: 'Dashboard (Claude)',
+    build: () => null,
+  },
+  {
     id: 'flow',
     titleKey: 'Flow',
     build: () => null,

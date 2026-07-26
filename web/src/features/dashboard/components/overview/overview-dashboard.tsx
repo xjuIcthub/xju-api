@@ -32,8 +32,11 @@ import { PerformanceHealthPanel } from './performance-health-panel'
 import { SummaryCards } from './summary-cards'
 import { UptimePanel } from './uptime-panel'
 
-
-export function OverviewDashboard() {
+export function OverviewDashboard({
+  provider = 'codex',
+}: {
+  provider?: 'codex' | 'claude'
+}) {
   const user = useAuthStore((state) => state.auth.user)
   const {
     apiInfo: showApiInfoPanel,
@@ -49,7 +52,7 @@ export function OverviewDashboard() {
 
   return (
     <div className='flex flex-col gap-4'>
-      <SummaryCards />
+      <SummaryCards provider={provider} />
 
       {showContentPanels && (
         <CardStaggerContainer
@@ -68,7 +71,7 @@ export function OverviewDashboard() {
                   'lg:grid-cols-2'
               )}
             >
-              {isAdmin && (
+              {isAdmin && provider === 'codex' && (
                 <CardStaggerItem className='lg:col-span-2'>
                   <PerformanceHealthPanel />
                 </CardStaggerItem>

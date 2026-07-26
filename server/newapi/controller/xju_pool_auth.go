@@ -98,6 +98,18 @@ func isPoolReadOnlyRequest(c *gin.Context) bool {
 	return c.GetBool(common.ContextKeyPoolReadOnly)
 }
 
+func rejectClaudeManualImport(c *gin.Context, poolID string) bool {
+	pool, ok := common.FindConfiguredPoolInfo(poolID)
+	if ok && common.NormalizePoolProvider(pool.Provider) == common.PoolProviderClaude {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Claude pools accept accounts through OAuth login only",
+		})
+		return true
+	}
+	return false
+}
+
 func shouldSanitizePoolResponse(c *gin.Context) bool {
 	return isPrivatePoolRequest(c) || isPoolReadOnlyRequest(c)
 }
@@ -336,6 +348,10 @@ type addPoolAuthFileRequest struct {
 // AddPoolAuthFile POST /api/pool/auth-files — paste one auth JSON into the pool.
 // CLIProxyAPI hot-reloads the pool on write, so no container restart is needed.
 func AddPoolAuthFile(c *gin.Context) {
+	poolID := poolIDFromRequest(c)
+	if rejectClaudeManualImport(c, poolID) {
+		return
+	}
 	if isPrivatePoolRequest(c) {
 		// Bound the whole JSON request before decoding it; checking Content after
 		// DecodeJson would still let an oversized body occupy memory first.
@@ -364,7 +380,6 @@ func AddPoolAuthFile(c *gin.Context) {
 		return
 	}
 
-	poolID := poolIDFromRequest(c)
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -772,6 +787,10 @@ func GetVerifyPoolProgress(c *gin.Context) {
 // (keyed by account file name) plus the latest refresh-job progress.
 func GetPoolAccountUsage(c *gin.Context) {
 	poolID := poolIDFromRequest(c)
+	if err := service.EnsurePoolProvider(poolID, common.PoolProviderCodex, "ChatGPT account quota"); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	if _, _, ok := common.ResolvePoolMgmt(poolID); !ok {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"success": false,
@@ -871,8 +890,9 @@ func ResetPoolAccountQuota(c *gin.Context) {
 // GetPoolCreateStatus until the new pool is registered. Both are root-only.
 
 type createPoolRequest struct {
-	Label string `json:"label"`
-	Mode  string `json:"mode"`
+	Label    string `json:"label"`
+	Provider string `json:"provider"`
+	Mode     string `json:"mode"`
 }
 
 // CreatePoolInstance POST /api/pool/create — start provisioning a new isolated
@@ -888,14 +908,16 @@ func CreatePoolInstance(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid request body"})
 		return
 	}
-	poolID, err := service.RequestPoolProvision(reqBody.Label, reqBody.Mode)
+	poolID, err := service.RequestPoolProvisionForProvider(reqBody.Label, reqBody.Provider, reqBody.Mode)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	recordManageAudit(c, "pool_auth.create", map[string]interface{}{
-		"pool":  poolID,
-		"label": strings.TrimSpace(reqBody.Label),
+		"pool":     poolID,
+		"label":    strings.TrimSpace(reqBody.Label),
+		"provider": common.NormalizePoolProvider(reqBody.Provider),
+		"mode":     strings.ToLower(strings.TrimSpace(reqBody.Mode)),
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"pool_id": poolID, "status": "provisioning"}})
 }
@@ -1214,6 +1236,9 @@ func forwardPoolAuthItems(ctx context.Context, baseURL, secret, poolID string, i
 // surface; token contents are never logged.
 func ImportPoolAuthFiles(c *gin.Context) {
 	poolID := poolIDFromRequest(c)
+	if rejectClaudeManualImport(c, poolID) {
+		return
+	}
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
 		c.JSON(http.StatusServiceUnavailable, gin.H{

@@ -27,7 +27,7 @@
 **前端自有(整目录/整文件,`web/src/`)**:
 
 - `registry/xju-modules.ts` —— 自有模块注册中心(侧栏项/开关键/URL 映射/开关元数据)
-- `features/pool/` —— 管理员号池管理页(`index.tsx` 多池 Tabs + zip / Web 登录导入、`api.ts`)，`codex-login-button.tsx` 为管理员与私人号池共用的 OAuth 交互
+- `features/pool/` —— 管理员号池管理页：公共池支持 `CPA (Codex)` / `CPA (Claude)` / `go-pool`，Provider 品牌标识与能力门控；Codex 支持 OAuth/ZIP/JSON，Claude 仅 Anthropic OAuth。`codex-login-button.tsx` 已泛化为 Provider-aware OAuth 交互，同时保持私人号池 Codex 登录复用
 - `features/private-pool/` —— 用户「我的号池」引导 + 单池管理工作台 + owner-scoped Codex Web 登录导入
 - `features/invite-codes/` —— 邀请码(`api.ts`、`invite-code-dialog.tsx`、`auth-section.tsx`)
 - `features/keys/components/pool-integration/` —— `cc-switch-dialog.tsx`（Claude 默认、标准 Config JSON / Deep Link、Token 本地遮罩）、`codex-config-dialog.tsx`
@@ -47,8 +47,10 @@
 
 - `controller/xju_pool_auth.go`(+test)、`controller/xju_private_pool_oauth.go`(+test)、`controller/xju_private_pool_settings.go`、`controller/xju_invite_code.go`
 - `service/xju_pool_client.go`、`service/xju_pool_cleanup.go`、`service/xju_private_pool_oauth.go`(+test)、`service/xju_invite_code.go`(+test)
+- `service/xju_pool_provision.go`、`service/xju_pool_channel.go` —— Provider/模式组合校验、watcher 契约、Provider 模型目录建渠道
 - `service/xju_private_pool_billing_test.go` —— 私人号池免用户余额、但保留统一 quota / Token / used-quota 计量的回归测试
 - `model/xju_invite_code.go`、`common/xju_pool_registry.go`(+test)
+- `model/usedata.go`、`model/usedata_flow.go` —— `quota_data.provider` 写入与 Codex/Claude 聚合隔离
 
 **后端注入点**:
 

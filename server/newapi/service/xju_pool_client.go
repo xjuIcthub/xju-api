@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
 // xju-api:new — 池管理 API 的唯一 HTTP round-trip helper(REFACTOR-PLAN §5.2)。
@@ -57,4 +59,19 @@ func PoolMgmtRequest(baseURL, secret, method, path string, body io.Reader) ([]by
 		return nil, fmt.Errorf("pool management HTTP %d: %s", status, strings.TrimSpace(string(data)))
 	}
 	return data, nil
+}
+
+// EnsurePoolProvider prevents provider-specific account operations from being
+// sent to an incompatible pool (for example ChatGPT Wham quota calls against a
+// Claude OAuth credential).
+func EnsurePoolProvider(poolID, expectedProvider, feature string) error {
+	pool, ok := common.FindConfiguredPoolInfo(poolID)
+	if !ok {
+		return fmt.Errorf("pool is not configured: %s", poolID)
+	}
+	provider := common.NormalizePoolProvider(pool.Provider)
+	if provider != expectedProvider {
+		return fmt.Errorf("%s is available for %s pools only", feature, expectedProvider)
+	}
+	return nil
 }

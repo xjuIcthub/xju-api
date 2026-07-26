@@ -139,3 +139,74 @@ func TestRootPoolCodexOAuthStartsSelectedPool(t *testing.T) {
 	require.NotEmpty(t, response.Data.SessionID)
 	service.DeletePrivatePoolOAuthSession(response.Data.SessionID, owner)
 }
+
+func TestRootPoolClaudeOAuthFlow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	disablePoolTestRedis(t)
+	setupModelListControllerTestDB(t)
+	owner := 78103
+	state := "claude0123456789claude0123456789"
+	var callbackProvider string
+	pool := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v0/management/anthropic-auth-url":
+			authURL := "https://claude.ai/oauth/authorize?state=" + state + "&redirect_uri=" + url.QueryEscape("http://localhost:54545/callback")
+			_, _ = fmt.Fprintf(w, `{"status":"ok","url":%q,"state":%q}`, authURL, state)
+		case r.Method == http.MethodPost && r.URL.Path == "/v0/management/oauth-callback":
+			var payload map[string]string
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			callbackProvider = payload["provider"]
+			assert.Equal(t, state, payload["state"])
+			assert.Equal(t, "claude-code", payload["code"])
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v0/management/get-auth-status":
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer pool.Close()
+
+	dir := t.TempDir()
+	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(dir, "registry.json"))
+	require.NoError(t, common.SavePoolRegistry([]common.PoolEntry{{
+		ID: "claude-oauth", Label: "Claude OAuth", Provider: common.PoolProviderClaude,
+		MgmtURL: pool.URL, MgmtSecret: "secret", Kind: common.PoolKindAdmin, GroupKey: "claude-oauth",
+	}}))
+
+	startRecorder := httptest.NewRecorder()
+	startContext, _ := gin.CreateTestContext(startRecorder)
+	startContext.Set("id", owner)
+	startContext.Set("role", common.RoleRootUser)
+	startContext.Request = httptest.NewRequest(http.MethodPost, "/api/pool/oauth/claude/start?pool=claude-oauth", nil)
+	StartPoolClaudeOAuth(startContext)
+	require.Equal(t, http.StatusOK, startRecorder.Code, startRecorder.Body.String())
+	var startResponse struct {
+		Data struct {
+			SessionID string `json:"session_id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(startRecorder.Body.Bytes(), &startResponse))
+	require.NotEmpty(t, startResponse.Data.SessionID)
+
+	callbackBody, _ := json.Marshal(map[string]string{
+		"session_id":   startResponse.Data.SessionID,
+		"redirect_url": "http://localhost:54545/callback?code=claude-code&state=" + state,
+	})
+	callbackRecorder := httptest.NewRecorder()
+	callbackContext, _ := gin.CreateTestContext(callbackRecorder)
+	callbackContext.Set("id", owner)
+	callbackContext.Request = httptest.NewRequest(http.MethodPost, "/api/pool/oauth/claude/callback", strings.NewReader(string(callbackBody)))
+	callbackContext.Request.Header.Set("Content-Type", "application/json")
+	SubmitPoolClaudeOAuthCallback(callbackContext)
+	require.Equal(t, http.StatusOK, callbackRecorder.Code, callbackRecorder.Body.String())
+	assert.Equal(t, "anthropic", callbackProvider)
+
+	statusRecorder := httptest.NewRecorder()
+	statusContext, _ := gin.CreateTestContext(statusRecorder)
+	statusContext.Set("id", owner)
+	statusContext.Request = httptest.NewRequest(http.MethodGet, "/api/pool/oauth/claude/status?session_id="+url.QueryEscape(startResponse.Data.SessionID), nil)
+	GetPoolClaudeOAuthStatus(statusContext)
+	require.Equal(t, http.StatusOK, statusRecorder.Code, statusRecorder.Body.String())
+	assert.Contains(t, statusRecorder.Body.String(), `"status":"ok"`)
+}

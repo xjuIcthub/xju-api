@@ -69,9 +69,9 @@ func findChannelByName(name string) int {
 	return ch.Id
 }
 
-// poolTemplateModels returns the model set to seed a new pool channel with. Every
-// cliproxy pool shares the same model set, so it clones from any existing pool
-// channel. It resolves the channel by a registered pool's channel id first — that
+// poolTemplateModels returns the legacy Codex model set to seed a new pool
+// channel when an older CLIProxy instance lacks the provider catalog endpoint.
+// It resolves the channel by a registered pool's channel id first — that
 // survives a channel rename (which moves the name away from the cliproxy-pool
 // prefix) — and falls back to the name prefix for any channel not yet in the
 // registry. This replaces the old hard dependency on channel id 1.
@@ -98,10 +98,59 @@ func poolTemplateModels() (string, error) {
 	return ch.Models, nil
 }
 
+type poolModelDefinitionsResponse struct {
+	Models []struct {
+		ID string `json:"id"`
+	} `json:"models"`
+}
+
+// poolProviderModels asks the newly-created CLIProxy instance for the model
+// catalog belonging to the pool's account provider. Codex retains the legacy
+// channel-clone fallback so old watcher/API combinations keep working; Claude
+// must never inherit a GPT model set.
+func poolProviderModels(baseURL, mgmtSecret, provider string) (string, error) {
+	provider = common.NormalizePoolProvider(provider)
+	data, err := PoolMgmtRequest(
+		strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		strings.TrimSpace(mgmtSecret),
+		"GET",
+		"/v0/management/model-definitions/"+provider,
+		nil,
+	)
+	if err == nil {
+		var response poolModelDefinitionsResponse
+		if decodeErr := common.Unmarshal(data, &response); decodeErr != nil {
+			err = fmt.Errorf("decode %s model definitions: %w", provider, decodeErr)
+		} else {
+			seen := make(map[string]struct{}, len(response.Models))
+			models := make([]string, 0, len(response.Models))
+			for _, item := range response.Models {
+				id := strings.TrimSpace(item.ID)
+				if id == "" {
+					continue
+				}
+				if _, exists := seen[id]; exists {
+					continue
+				}
+				seen[id] = struct{}{}
+				models = append(models, id)
+			}
+			if len(models) > 0 {
+				return strings.Join(models, ","), nil
+			}
+			err = fmt.Errorf("%s model definitions are empty", provider)
+		}
+	}
+	if provider == common.PoolProviderCodex {
+		return poolTemplateModels()
+	}
+	return "", err
+}
+
 // createPoolChannel creates the routing channel for a pool (idempotent by name)
 // and registers its immutable group key. Private group keys are intentionally
 // omitted from global UserUsableGroups and are exposed only to their owner.
-func createPoolChannel(poolID, internalKey, baseURL, label, groupKey string, globallyVisible bool) (int, error) {
+func createPoolChannel(poolID, internalKey, baseURL, mgmtSecret, label, groupKey, provider string, globallyVisible bool) (int, error) {
 	name := poolChannelName(poolID)
 	if existing := findChannelByName(name); existing != 0 {
 		channel, err := model.GetChannelById(existing, false)
@@ -113,7 +162,7 @@ func createPoolChannel(poolID, internalKey, baseURL, label, groupKey string, glo
 		}
 		return existing, nil
 	}
-	models, err := poolTemplateModels()
+	models, err := poolProviderModels(baseURL, mgmtSecret, provider)
 	if err != nil {
 		return 0, err
 	}

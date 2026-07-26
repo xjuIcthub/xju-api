@@ -6,6 +6,8 @@
 > ✅ 2026-07-15 已补:`deploy/build-cliproxy.sh` 落地,compose 两处 + provision 默认值统一指向自建
 > `winbeau/cli-proxy-api:v0.9.0`;tri 同机构建+运行免 registry;运行中池重建步骤见 docs/runbook.md §升级。
 > Open Q4 的"custom cliproxy image pipeline"缺口就此闭合;剩余的"动态池自动重建"记为 backlog。
+>
+> ✅ 2026-07-26 已实现 Provider 扩展：公共池创建现为 `CPA (Codex)` / `CPA (Claude)` / `go-pool`；Claude 池只接受 Anthropic OAuth 登录，不接受 JSON/ZIP 导入，也不开放 Codex 专属 Wham 额度与探针。本文后续 Mode A/B 仍用于说明 **Codex enriched** 机制，不能再视为全部 Provider 的建池 UI 现状。
 
 ---
 

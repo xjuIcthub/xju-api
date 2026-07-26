@@ -2,6 +2,8 @@ package service
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +30,7 @@ func TestPoolChannelCreateDelete(t *testing.T) {
 		Models: "gpt-5,gpt-4", Group: "default", Status: 1,
 	}).Error)
 
-	id, err := createPoolChannel("edu", "edu-key", "http://cli-proxy-api-edu:8319/", "Edu", "edu", true)
+	id, err := createPoolChannel("edu", "edu-key", "http://cli-proxy-api-edu:8319/", "", "Edu", "edu", common.PoolProviderCodex, true)
 	require.NoError(t, err)
 	require.NotZero(t, id)
 
@@ -53,7 +55,7 @@ func TestPoolChannelCreateDelete(t *testing.T) {
 		"settings":        "",
 		"header_override": nil,
 	}).Error)
-	id2, err := createPoolChannel("edu", "ignored", "ignored", "Edu", "edu", true)
+	id2, err := createPoolChannel("edu", "ignored", "ignored", "", "Edu", "edu", common.PoolProviderCodex, true)
 	require.NoError(t, err)
 	assert.Equal(t, id, id2)
 	require.NoError(t, model.DB.First(&ch, id).Error)
@@ -71,6 +73,20 @@ func TestPoolChannelCreateDelete(t *testing.T) {
 	var cnt int64
 	model.DB.Model(&model.Channel{}).Where("id = ?", id).Count(&cnt)
 	assert.Zero(t, cnt, "channel deleted")
+}
+
+func TestPoolProviderModelsUsesClaudeCatalogWithoutGPTFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v0/management/model-definitions/claude", r.URL.Path)
+		assert.Equal(t, "Bearer secret", r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`{"channel":"claude","models":[{"id":"claude-sonnet-4-5"},{"id":"claude-opus-4-1"},{"id":"claude-sonnet-4-5"}]}`))
+	}))
+	defer server.Close()
+
+	models, err := poolProviderModels(server.URL, "secret", common.PoolProviderClaude)
+	require.NoError(t, err)
+	assert.Equal(t, "claude-sonnet-4-5,claude-opus-4-1", models)
+	assert.NotContains(t, models, "gpt")
 }
 
 func TestEnsurePoolChannelCompatibilityPreservesRoutingIdentityAndIsIdempotent(t *testing.T) {
@@ -183,7 +199,7 @@ func TestPrivatePoolChannelUsesHiddenImmutableGroup(t *testing.T) {
 	}).Error)
 
 	groupKey := common.PrivatePoolGroupKey(4242)
-	id, err := createPoolChannel("private-case", "private-key", "http://private:9000", "Alice Pool", groupKey, false)
+	id, err := createPoolChannel("private-case", "private-key", "http://private:9000", "", "Alice Pool", groupKey, common.PoolProviderCodex, false)
 	require.NoError(t, err)
 	t.Cleanup(func() { deletePoolChannel("private-case", groupKey, id) })
 

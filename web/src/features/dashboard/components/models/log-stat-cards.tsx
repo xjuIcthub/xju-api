@@ -45,6 +45,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 interface LogStatCardsProps {
   filters?: DashboardFilters
+  provider?: 'codex' | 'claude'
   onDataUpdate?: (data: QuotaDataItem[], loading: boolean) => void
 }
 
@@ -78,7 +79,7 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   const [timeRangeMinutes, setTimeRangeMinutes] = useState(0)
 
-  const { filters, onDataUpdate } = props
+  const { filters, onDataUpdate, provider = 'codex' } = props
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -96,7 +97,10 @@ export function LogStatCards(props: LogStatCardsProps) {
     const timeDiff = (timeRange.end_timestamp - timeRange.start_timestamp) / 60
     setTimeRangeMinutes(timeDiff)
 
-    void getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin)
+    void getUserQuotaDates(
+      { ...buildQueryParams(timeRange, filters), provider },
+      isAdmin
+    )
       .then((res) => {
         if (abortController.signal.aborted) return
         const data = res?.data || []
@@ -118,7 +122,7 @@ export function LogStatCards(props: LogStatCardsProps) {
     return () => {
       abortController.abort()
     }
-  }, [filters, isAdmin, onDataUpdate])
+  }, [filters, isAdmin, onDataUpdate, provider])
 
   const adaptedStats = {
     rpm: stats?.totalCount ?? 0,

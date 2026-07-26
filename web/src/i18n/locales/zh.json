@@ -5528,6 +5528,21 @@
     "Your upstream accounts, routing channel, and API keys will be isolated from every other user.": "你的上游账号、路由渠道和 API Key 将与其他所有用户完全隔离。",
     "Login, upload, paste JSON, or import a ZIP.": "登录、上传、粘贴 JSON 或导入 ZIP。",
     "Create API key": "创建 API 密钥",
-    "New keys route only to your private pool.": "新建密钥只会路由到你的私人号池。"
+    "New keys route only to your private pool.": "新建密钥只会路由到你的私人号池。",
+    "Overview (Claude)": "概览（Claude）",
+    "Dashboard (Claude)": "数据看板（Claude）",
+    "Upstream Claude accounts behind the shared pool.": "公共号池中的上游 Claude 账号。",
+    "Upstream Codex / GPT / OpenAI accounts behind the shared pool.": "公共号池中的上游 Codex / GPT / OpenAI 账号。",
+    "Claude accounts are imported only through the secure Anthropic OAuth login.": "Claude 账号只能通过安全的 Anthropic OAuth 登录导入。",
+    "CPA (Codex)": "CPA（Codex）",
+    "CPA (Claude)": "CPA（Claude）",
+    "go-pool": "go-pool",
+    "Pool type": "号池类型",
+    "Login with {{provider}}": "通过 {{provider}} 登录",
+    "Credentials and MFA stay with {{provider}}. This page only receives the one-time localhost callback.": "密码和二次验证始终由 {{provider}} 处理，本页只接收一次性的 localhost 回调地址。",
+    "Open the {{provider}} login page": "打开 {{provider}} 登录页面",
+    "Complete login in the new tab. It will automatically redirect to the localhost callback.": "在新标签页完成登录，随后会自动跳转到 localhost 回调地址。",
+    "Open {{provider}} login": "打开 {{provider}} 登录页",
+    "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.": "普通用户只能只读查看公共号池。Claude 池仅展示账号状态；如需管理自己的 Codex 账号，请使用“我的号池”。"
   }
 }

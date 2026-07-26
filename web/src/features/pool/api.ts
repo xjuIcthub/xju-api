@@ -81,6 +81,7 @@ function normalizeList(data: unknown): PoolAuthFile[] {
 export type PoolInfo = {
   id: string
   label: string
+  provider?: 'codex' | 'claude'
   build_mode?: 'cliproxy' | 'gopool'
   owner_user_id?: number
   owner_username?: string
@@ -95,7 +96,9 @@ export type ImportResult = {
   failed: { name: string; error: string }[]
 }
 
-export type PoolCodexLoginSession = {
+export type PoolLoginProvider = 'codex' | 'claude'
+
+export type PoolLoginSession = {
   session_id: string
   status: 'starting' | 'waiting_callback' | 'exchanging'
   url: string
@@ -103,7 +106,7 @@ export type PoolCodexLoginSession = {
   expires_at: number
 }
 
-export type PoolCodexLoginStatus = {
+export type PoolLoginStatus = {
   status: 'waiting_callback' | 'exchanging' | 'ok' | 'error'
   error?: string
 }
@@ -168,24 +171,26 @@ export async function importPoolAuthFiles(
   return res.data.data
 }
 
-export async function startPoolCodexLogin(
-  pool: string
-): Promise<PoolCodexLoginSession> {
-  const res = await api.post<ApiEnvelope<PoolCodexLoginSession>>(
-    `/api/pool/oauth/codex/start${poolQuery(pool)}`
+export async function startPoolLogin(
+  pool: string,
+  provider: PoolLoginProvider
+): Promise<PoolLoginSession> {
+  const res = await api.post<ApiEnvelope<PoolLoginSession>>(
+    `/api/pool/oauth/${provider}/start${poolQuery(pool)}`
   )
   if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.message || 'Failed to start Codex login')
+    throw new Error(res.data.message || `Failed to start ${provider} login`)
   }
   return res.data.data
 }
 
-export async function submitPoolCodexCallback(
+export async function submitPoolLoginCallback(
+  provider: PoolLoginProvider,
   sessionId: string,
   redirectUrl: string
-): Promise<PoolCodexLoginStatus> {
-  const res = await api.post<ApiEnvelope<PoolCodexLoginStatus>>(
-    '/api/pool/oauth/codex/callback',
+): Promise<PoolLoginStatus> {
+  const res = await api.post<ApiEnvelope<PoolLoginStatus>>(
+    `/api/pool/oauth/${provider}/callback`,
     { session_id: sessionId, redirect_url: redirectUrl }
   )
   if (!res.data.success || !res.data.data) {
@@ -194,26 +199,32 @@ export async function submitPoolCodexCallback(
   return res.data.data
 }
 
-export async function getPoolCodexLoginStatus(
+export async function getPoolLoginStatus(
+  provider: PoolLoginProvider,
   sessionId: string
-): Promise<PoolCodexLoginStatus> {
-  const res = await api.get<ApiEnvelope<PoolCodexLoginStatus>>(
-    '/api/pool/oauth/codex/status',
+): Promise<PoolLoginStatus> {
+  const res = await api.get<ApiEnvelope<PoolLoginStatus>>(
+    `/api/pool/oauth/${provider}/status`,
     { params: { session_id: sessionId } }
   )
   if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.message || 'Failed to check Codex login status')
+    throw new Error(
+      res.data.message || `Failed to check ${provider} login status`
+    )
   }
   return res.data.data
 }
 
-export async function cancelPoolCodexLogin(sessionId: string): Promise<void> {
+export async function cancelPoolLogin(
+  provider: PoolLoginProvider,
+  sessionId: string
+): Promise<void> {
   const res = await api.delete<ApiEnvelope<unknown>>(
-    '/api/pool/oauth/codex/session',
+    `/api/pool/oauth/${provider}/session`,
     { params: { session_id: sessionId } }
   )
   if (!res.data.success) {
-    throw new Error(res.data.message || 'Failed to cancel Codex login')
+    throw new Error(res.data.message || `Failed to cancel ${provider} login`)
   }
 }
 
@@ -427,11 +438,12 @@ export type PoolCreateStatus = {
 
 export async function createPool(
   label: string,
+  provider: 'codex' | 'claude',
   mode: 'cliproxy' | 'gopool' = 'cliproxy'
 ): Promise<{ pool_id: string }> {
   const res = await api.post<ApiEnvelope<{ pool_id: string; status: string }>>(
     '/api/pool/create',
-    { label, mode }
+    { label, provider, mode }
   )
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.message || 'Failed to create pool')

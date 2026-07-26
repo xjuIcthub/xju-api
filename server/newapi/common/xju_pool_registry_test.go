@@ -186,6 +186,32 @@ func TestPoolEntryBuildModePersists(t *testing.T) { // T3.1
 	assert.Equal(t, "gopool", got.BuildMode)
 }
 
+func TestPoolEntryProviderPersistsAndLegacyDefaultsToCodex(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(dir, "reg.json"))
+	require.NoError(t, AddPoolToRegistry(PoolEntry{
+		ID: "claude", Label: "Claude", MgmtURL: "http://x:9", MgmtSecret: "s",
+		Provider: PoolProviderClaude, Kind: PoolKindAdmin, GroupKey: "claude",
+	}))
+	require.NoError(t, AddPoolToRegistry(PoolEntry{
+		ID: "legacy", Label: "Legacy", MgmtURL: "http://y:9", MgmtSecret: "s",
+	}))
+
+	claude, ok := GetPoolEntry("claude")
+	require.True(t, ok)
+	assert.Equal(t, PoolProviderClaude, claude.Provider)
+	legacy, ok := GetPoolEntry("legacy")
+	require.True(t, ok)
+	assert.Equal(t, PoolProviderCodex, legacy.Provider)
+
+	provider, ok := FindPoolProviderByRouting(claude.ChannelID, claude.GroupKey)
+	require.True(t, ok)
+	assert.Equal(t, PoolProviderClaude, provider)
+	assert.Error(t, AddPoolToRegistry(PoolEntry{
+		ID: "bad", MgmtURL: "http://z:9", MgmtSecret: "s", Provider: "gemini",
+	}))
+}
+
 func TestListConfiguredPoolsBuildModeDefault(t *testing.T) { // T3.2
 	dir := t.TempDir()
 	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(dir, "reg.json"))

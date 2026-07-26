@@ -243,11 +243,15 @@ func SetApiRouter(router *gin.Engine) {
 				poolManageScopedRoute.PATCH("/auth-files/status", controller.SetPoolAuthFileStatus)
 				poolManageScopedRoute.DELETE("/auth-files", controller.DeletePoolAuthFile)
 				poolManageScopedRoute.POST("/oauth/codex/start", controller.StartPoolCodexOAuth)
+				poolManageScopedRoute.POST("/oauth/claude/start", controller.StartPoolClaudeOAuth)
 			}
 
 			poolManageRoute.POST("/oauth/codex/callback", controller.SubmitPrivatePoolCodexOAuthCallback)
 			poolManageRoute.GET("/oauth/codex/status", controller.GetPrivatePoolCodexOAuthStatus)
 			poolManageRoute.DELETE("/oauth/codex/session", controller.CancelPrivatePoolCodexOAuth)
+			poolManageRoute.POST("/oauth/claude/callback", controller.SubmitPoolClaudeOAuthCallback)
+			poolManageRoute.GET("/oauth/claude/status", controller.GetPoolClaudeOAuthStatus)
+			poolManageRoute.DELETE("/oauth/claude/session", controller.CancelPoolClaudeOAuth)
 		}
 
 		// User-owned private pool. Every account-management route is bound by

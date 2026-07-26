@@ -96,6 +96,7 @@ type provisionRequest struct {
 	PoolID      string `json:"pool_id"`
 	Label       string `json:"label,omitempty"`
 	Port        int    `json:"port,omitempty"`
+	Provider    string `json:"provider,omitempty"`
 	Mode        string `json:"mode,omitempty"`
 	OwnerUserID int    `json:"owner_user_id,omitempty"`
 	Kind        string `json:"kind,omitempty"`
@@ -112,6 +113,7 @@ type provisionResult struct {
 	Port        int    `json:"port"`
 	InternalKey string `json:"internal_key"`
 	Error       string `json:"error"`
+	Provider    string `json:"provider,omitempty"`
 	Mode        string `json:"mode,omitempty"`
 	OwnerUserID int    `json:"owner_user_id,omitempty"`
 	Kind        string `json:"kind,omitempty"`
@@ -152,6 +154,7 @@ func pendingPrivateProvisions(dir string) map[string]provisionRequest {
 				PoolID:      raw.PoolID,
 				Label:       raw.Label,
 				Port:        raw.Port,
+				Provider:    raw.Provider,
 				Mode:        raw.Mode,
 				OwnerUserID: raw.OwnerUserID,
 				Kind:        raw.Kind,
@@ -245,7 +248,14 @@ func GetPrivatePoolProvisionState(ownerUserID int) (PrivatePoolProvisionState, e
 // and independent of the label, so two pools can share a display name (or be
 // renamed freely) without their ids / containers / channels ever colliding.
 func RequestPoolProvision(label, mode string) (string, error) {
-	return requestPoolProvision(label, mode, 0, common.PoolKindAdmin)
+	return RequestPoolProvisionForProvider(label, common.PoolProviderCodex, mode)
+}
+
+// RequestPoolProvisionForProvider starts a shared pool with an explicit
+// upstream account provider. Provider and build mode are orthogonal except that
+// go-pool currently supports Codex accounts only.
+func RequestPoolProvisionForProvider(label, provider, mode string) (string, error) {
+	return requestPoolProvision(label, provider, mode, 0, common.PoolKindAdmin)
 }
 
 // RequestPrivatePoolProvision starts a user-owned isolated pool. The build mode
@@ -255,10 +265,31 @@ func RequestPrivatePoolProvision(label string, ownerUserID int) (string, error) 
 	if ownerUserID <= 0 {
 		return "", fmt.Errorf("private pool owner is required")
 	}
-	return requestPoolProvision(label, "cliproxy", ownerUserID, common.PoolKindPrivate)
+	return requestPoolProvision(label, common.PoolProviderCodex, "cliproxy", ownerUserID, common.PoolKindPrivate)
 }
 
-func requestPoolProvision(label, mode string, ownerUserID int, kind string) (string, error) {
+func validatePoolBuild(provider, mode string) (string, string, error) {
+	rawProvider := strings.ToLower(strings.TrimSpace(provider))
+	if rawProvider == "" {
+		rawProvider = common.PoolProviderCodex
+	}
+	if !common.IsSupportedPoolProvider(rawProvider) {
+		return "", "", fmt.Errorf("unsupported pool provider: %s", rawProvider)
+	}
+	rawMode := strings.ToLower(strings.TrimSpace(mode))
+	if rawMode == "" {
+		rawMode = "cliproxy"
+	}
+	if rawMode != "cliproxy" && rawMode != "gopool" {
+		return "", "", fmt.Errorf("unsupported pool build mode: %s", rawMode)
+	}
+	if rawProvider == common.PoolProviderClaude && rawMode != "cliproxy" {
+		return "", "", fmt.Errorf("Claude pools support CPA mode only")
+	}
+	return rawProvider, rawMode, nil
+}
+
+func requestPoolProvision(label, provider, mode string, ownerUserID int, kind string) (string, error) {
 	dir := provisionDir()
 	if dir == "" {
 		return "", fmt.Errorf("pool provisioning is not enabled")
@@ -266,6 +297,13 @@ func requestPoolProvision(label, mode string, ownerUserID int, kind string) (str
 	label = strings.TrimSpace(label)
 	if label == "" {
 		return "", fmt.Errorf("pool name is required")
+	}
+	provider, mode, err := validatePoolBuild(provider, mode)
+	if err != nil {
+		return "", err
+	}
+	if kind == common.PoolKindPrivate && provider != common.PoolProviderCodex {
+		return "", fmt.Errorf("private pools support provider %q only", common.PoolProviderCodex)
 	}
 	provisionRequestMu.Lock()
 	defer provisionRequestMu.Unlock()
@@ -291,13 +329,13 @@ func requestPoolProvision(label, mode string, ownerUserID int, kind string) (str
 	} else {
 		groupKey = id
 	}
-	m := normalizeBuildMode(mode)
 	req := provisionRequest{
 		Action:      "create",
 		PoolID:      id,
 		Label:       label,
 		Port:        allocatePoolPort(dir),
-		Mode:        m,
+		Provider:    provider,
+		Mode:        mode,
 		OwnerUserID: ownerUserID,
 		Kind:        kind,
 		GroupKey:    groupKey,
@@ -357,13 +395,18 @@ func pollPoolProvision(poolID string, expectedOwnerUserID int) (string, error) {
 	}
 	poolID = strings.TrimSpace(poolID)
 	if _, _, ok := common.ResolvePoolMgmt(poolID); ok {
+		entry, found := common.GetPoolEntry(poolID)
 		if expectedOwnerUserID > 0 {
-			entry, found := common.GetPoolEntry(poolID)
 			if !found || !common.CanManagePool(expectedOwnerUserID, common.RoleCommonUser, entry) {
 				return "", fmt.Errorf("private pool ownership mismatch")
 			}
 		}
-		return "ready", nil
+		if found && entry.ChannelID != 0 {
+			return "ready", nil
+		}
+		// A previous poll may have registered the pool before channel creation
+		// succeeded. Continue through the durable watcher result so the missing
+		// channel is retried instead of reporting a permanently unrouted pool.
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "results", poolID+".json"))
 	if err != nil {
@@ -413,29 +456,36 @@ func pollPoolProvision(poolID string, expectedOwnerUserID int) (string, error) {
 	if label == "" {
 		label = poolID
 	}
-	mode := normalizeBuildMode(r.Mode)
+	provider, mode, err := validatePoolBuild(r.Provider, r.Mode)
+	if err != nil {
+		return "", fmt.Errorf("invalid provisioning pool configuration: %w", err)
+	}
+	if kind == common.PoolKindPrivate && provider != common.PoolProviderCodex {
+		return "", fmt.Errorf("private pools support provider %q only", common.PoolProviderCodex)
+	}
 	if err := common.AddPoolToRegistry(common.PoolEntry{
 		ID:          r.PoolID,
 		Label:       label,
 		MgmtURL:     r.MgmtURL,
 		MgmtSecret:  r.MgmtSecret,
 		Port:        r.Port,
+		Provider:    provider,
 		BuildMode:   mode,
 		OwnerUserID: r.OwnerUserID,
 		Kind:        kind,
 		GroupKey:    r.GroupKey,
 	}); err != nil {
-		// A concurrent poll may have registered it first — treat as ready.
-		if _, _, ok := common.ResolvePoolMgmt(poolID); ok {
-			return "ready", nil
+		// A concurrent or earlier poll may have registered it first. Keep going
+		// so channel creation can be retried from the durable watcher result.
+		if _, _, ok := common.ResolvePoolMgmt(poolID); !ok {
+			return "", err
 		}
-		return "", err
 	}
 	// Phase C: route the pool's group to its cliproxy instance. The mgmt URL and
 	// the relay base URL are the same host:port. A channel failure leaves the
 	// pool registered (importable/verifiable) but unrouted — log, don't unwind.
 	if chID, err := createPoolChannel(
-		r.PoolID, r.InternalKey, r.MgmtURL, label, r.GroupKey, kind != common.PoolKindPrivate,
+		r.PoolID, r.InternalKey, r.MgmtURL, r.MgmtSecret, label, r.GroupKey, provider, kind != common.PoolKindPrivate,
 	); err != nil {
 		common.SysError("pool " + r.PoolID + " registered but channel creation failed: " + err.Error())
 	} else {

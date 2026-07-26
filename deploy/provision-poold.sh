@@ -48,8 +48,8 @@ err_result() { # id message
 	write_result "$1" "$(jq -nc --arg id "$1" --arg e "$2" '{pool_id:$id,status:"error",error:$e}')"
 }
 
-provision_create() { # id label port mode owner_user_id kind group_key
-	local id="$1" label="$2" port="$3" mode="$4" owner_user_id="$5" kind="$6" group_key="$7"
+provision_create() { # id label port provider mode owner_user_id kind group_key
+	local id="$1" label="$2" port="$3" provider="$4" mode="$5" owner_user_id="$6" kind="$7" group_key="$8"
 	if ! [[ "$port" =~ ^[0-9]+$ ]] || ((port < 1024 || port > 65535)); then
 		err_result "$id" "invalid port: $port"
 		return
@@ -66,13 +66,33 @@ provision_create() { # id label port mode owner_user_id kind group_key
 		fi
 		;;
 	private)
-		if ((owner_user_id <= 0)) || [[ "$group_key" != "private-$owner_user_id" ]]; then
+		if ((owner_user_id <= 0)) || [[ "$group_key" != "private-$owner_user_id" ]] || [[ "$provider" != codex ]]; then
 			err_result "$id" "invalid private pool ownership metadata"
 			return
 		fi
 		;;
 	*)
 		err_result "$id" "invalid pool kind: $kind"
+		return
+		;;
+	esac
+	case "$provider" in
+	codex|claude) ;;
+	*)
+		err_result "$id" "invalid pool provider: $provider"
+		return
+		;;
+	esac
+	case "$mode" in
+	cliproxy) ;;
+	gopool)
+		if [[ "$provider" != codex ]]; then
+			err_result "$id" "go-pool supports Codex accounts only"
+			return
+		fi
+		;;
+	*)
+		err_result "$id" "invalid pool mode: $mode"
 		return
 		;;
 	esac
@@ -118,9 +138,9 @@ provision_create() { # id label port mode owner_user_id kind group_key
 	url="http://cli-proxy-api-$id:$port"
 	write_result "$id" "$(jq -nc \
 		--arg id "$id" --arg label "$label" --arg url "$url" --arg mgmt "$mgmt" \
-		--arg key "$key" --arg mode "$mode" --arg kind "$kind" --arg group "$group_key" \
+		--arg key "$key" --arg provider "$provider" --arg mode "$mode" --arg kind "$kind" --arg group "$group_key" \
 		--argjson port "$port" --argjson owner "$owner_user_id" \
-		'{pool_id:$id,label:$label,action:"create",status:"ok",mgmt_url:$url,mgmt_secret:$mgmt,port:$port,internal_key:$key,error:"",mode:$mode,owner_user_id:$owner,kind:$kind,group_key:$group}')"
+		'{pool_id:$id,label:$label,action:"create",status:"ok",mgmt_url:$url,mgmt_secret:$mgmt,port:$port,internal_key:$key,error:"",provider:$provider,mode:$mode,owner_user_id:$owner,kind:$kind,group_key:$group}')"
 	log "created pool $id on port $port"
 }
 
@@ -134,7 +154,7 @@ provision_delete() { # id
 }
 
 process_one() { # request-file
-	local f="$1" id action label port pid mode owner_user_id kind group_key
+	local f="$1" id action label port pid provider mode owner_user_id kind group_key
 	id="$(basename "$f" .json)"
 	if ! action="$(jq -r '.action // "create"' "$f" 2>/dev/null)"; then
 		err_result "$id" "unreadable request"
@@ -143,6 +163,7 @@ process_one() { # request-file
 	pid="$(jq -r '.pool_id // ""' "$f")"
 	label="$(jq -r '.label // .pool_id' "$f")"
 	port="$(jq -r '.port // 0' "$f")"
+	provider="$(jq -r '.provider // "codex"' "$f")"
 	mode="$(jq -r '.mode // "cliproxy"' "$f")"
 	owner_user_id="$(jq -r '.owner_user_id // 0' "$f")"
 	kind="$(jq -r '.kind // "admin"' "$f")"
@@ -153,7 +174,7 @@ process_one() { # request-file
 	fi
 	case "$action" in
 	delete) provision_delete "$pid" ;;
-	create) provision_create "$pid" "$label" "$port" "$mode" "$owner_user_id" "$kind" "$group_key" ;;
+	create) provision_create "$pid" "$label" "$port" "$provider" "$mode" "$owner_user_id" "$kind" "$group_key" ;;
 	*) err_result "$id" "unknown action: $action" ;;
 	esac
 }

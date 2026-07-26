@@ -134,21 +134,26 @@ const HEALTH_CONFIG: Record<
   },
 }
 
-export function SummaryCards() {
+export function SummaryCards({
+  provider = 'codex',
+}: {
+  provider?: 'codex' | 'claude'
+}) {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const { status, loading } = useStatus()
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
-  const usedQuota = Number(user?.used_quota ?? 0)
-  const requestCount = Number(user?.request_count ?? 0)
+  const accountUsedQuota = Number(user?.used_quota ?? 0)
+  const accountRequestCount = Number(user?.request_count ?? 0)
 
   const usageTrendQuery = useQuery({
     queryKey: [
       'dashboard',
       'overview',
       'summary-sparklines',
+      provider,
       summaryTimeRange.start_timestamp,
       summaryTimeRange.end_timestamp,
     ],
@@ -157,16 +162,10 @@ export function SummaryCards() {
         start_timestamp: summaryTimeRange.start_timestamp,
         end_timestamp: summaryTimeRange.end_timestamp,
         default_time: 'hour',
+        provider,
       }),
     staleTime: 60 * 1000,
   })
-
-  const summaryValues = useMemo(() => {
-    return {
-      usedDisplay: formatQuota(usedQuota),
-      requestCountDisplay: formatNumber(requestCount),
-    }
-  }, [requestCount, usedQuota])
 
   const currencyEnabledFromStore = isCurrencyDisplayEnabled()
   const statusCurrencyFlag =
@@ -224,6 +223,7 @@ export function SummaryCards() {
       'dashboard',
       'overview',
       'historical-tokens',
+      provider,
       historicalTimeRange.start_timestamp,
     ],
     queryFn: async () =>
@@ -231,6 +231,7 @@ export function SummaryCards() {
         start_timestamp: historicalTimeRange.start_timestamp,
         end_timestamp: historicalTimeRange.end_timestamp,
         default_time: 'day',
+        provider,
       }),
     staleTime: 5 * 60 * 1000,
   })
@@ -242,6 +243,38 @@ export function SummaryCards() {
       ),
     [historicalTokensQuery.data?.data]
   )
+  const providerUsedQuota = useMemo(
+    () =>
+      (historicalTokensQuery.data?.data ?? []).reduce(
+        (total, item) => total + (Number(item.quota) || 0),
+        0
+      ),
+    [historicalTokensQuery.data?.data]
+  )
+  const providerRequestCount = useMemo(
+    () =>
+      (historicalTokensQuery.data?.data ?? []).reduce(
+        (total, item) => total + (Number(item.count) || 0),
+        0
+      ),
+    [historicalTokensQuery.data?.data]
+  )
+  const summaryValues = useMemo(() => {
+    const usedQuota =
+      provider === 'claude' ? providerUsedQuota : accountUsedQuota
+    const requestCount =
+      provider === 'claude' ? providerRequestCount : accountRequestCount
+    return {
+      usedDisplay: formatQuota(usedQuota),
+      requestCountDisplay: formatNumber(requestCount),
+    }
+  }, [
+    accountRequestCount,
+    accountUsedQuota,
+    provider,
+    providerRequestCount,
+    providerUsedQuota,
+  ])
   const tokens24hDisplay = formatTokenCount(recent24hTokens)
   const totalTokensDisplay = formatTokenCount(totalTokens)
 
@@ -291,7 +324,7 @@ export function SummaryCards() {
   })
 
   return (
-    <div className='bg-card overflow-hidden rounded-2xl border '>
+    <div className='bg-card overflow-hidden rounded-2xl border'>
       <div className='grid xl:grid-cols-[minmax(0,1fr)_19rem]'>
         <div className='flex flex-col gap-2.5 p-3 sm:gap-3 sm:p-5'>
           <div className='flex flex-wrap items-start justify-between gap-3'>
@@ -387,7 +420,6 @@ export function SummaryCards() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </div>

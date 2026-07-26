@@ -47,6 +47,7 @@ export type CodexLoginStatus = {
 }
 
 type CodexLoginButtonProps = {
+  provider?: 'codex' | 'claude'
   scopeKey: readonly (string | number)[]
   startLogin: () => Promise<CodexLoginSession>
   submitCallback: (
@@ -62,6 +63,7 @@ type CodexLoginButtonProps = {
 // xju-api:new — one browser OAuth workflow shared by the root pool workbench
 // and the owner-scoped private-pool workbench.
 export function CodexLoginButton({
+  provider = 'codex',
   scopeKey,
   startLogin,
   submitCallback,
@@ -71,6 +73,11 @@ export function CodexLoginButton({
   disabled = false,
 }: CodexLoginButtonProps) {
   const { t } = useTranslation()
+  const providerLabel = provider === 'claude' ? 'Claude' : 'OpenAI'
+  const callbackURLPlaceholder =
+    provider === 'claude'
+      ? 'http://localhost:54545/callback?code=...&state=...'
+      : 'http://localhost:1455/auth/callback?code=...&state=...'
   const [open, setOpen] = useState(false)
   const [session, setSession] = useState<CodexLoginSession | null>(null)
   const [callbackURL, setCallbackURL] = useState('')
@@ -100,7 +107,7 @@ export function CodexLoginButton({
   )
 
   const statusQuery = useQuery({
-    queryKey: ['pool-codex-oauth', ...scopeKey, session?.session_id],
+    queryKey: ['pool-oauth', provider, ...scopeKey, session?.session_id],
     queryFn: () => {
       if (!session) throw new Error(t('Login session expired'))
       return getStatus(session.session_id)
@@ -214,9 +221,10 @@ export function CodexLoginButton({
         onOpenChange={(nextOpen) => {
           if (!nextOpen) closeDialog()
         }}
-        title={t('Login with OpenAI')}
+        title={t('Login with {{provider}}', { provider: providerLabel })}
         description={t(
-          'Credentials and MFA stay on OpenAI. This page only receives the one-time localhost callback.'
+          'Credentials and MFA stay with {{provider}}. This page only receives the one-time localhost callback.',
+          { provider: providerLabel }
         )}
         contentClassName='max-w-xl'
         bodyClassName='space-y-4'
@@ -238,11 +246,14 @@ export function CodexLoginButton({
           <>
             <div className='border-border rounded-md border p-3'>
               <p className='text-sm font-medium'>
-                1. {t('Open the OpenAI login page')}
+                1.{' '}
+                {t('Open the {{provider}} login page', {
+                  provider: providerLabel,
+                })}
               </p>
               <p className='text-muted-foreground mt-1 text-xs'>
                 {t(
-                  'Complete login in the new tab. It will automatically redirect to localhost:1455.'
+                  'Complete login in the new tab. It will automatically redirect to the localhost callback.'
                 )}
               </p>
               <Button
@@ -254,7 +265,7 @@ export function CodexLoginButton({
                 }
               >
                 <ExternalLink />
-                {t('Open OpenAI login')}
+                {t('Open {{provider}} login', { provider: providerLabel })}
               </Button>
             </div>
             <div className='border-border rounded-md border p-3'>
@@ -270,7 +281,7 @@ export function CodexLoginButton({
                 className='mt-3 min-h-24 font-mono text-xs'
                 value={callbackURL}
                 onChange={(event) => setCallbackURL(event.target.value)}
-                placeholder='http://localhost:1455/auth/callback?code=...&state=...'
+                placeholder={callbackURLPlaceholder}
                 spellCheck={false}
               />
               <div className='mt-2 flex flex-wrap gap-2'>

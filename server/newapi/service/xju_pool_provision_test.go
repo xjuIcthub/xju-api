@@ -116,6 +116,28 @@ func TestRequestPoolProvisionMode(t *testing.T) { // T3.4
 	assert.Contains(t, string(data2), `"mode":"cliproxy"`)
 }
 
+func TestRequestPoolProvisionProviderCombinations(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("POOL_PROVISION_DIR", dir)
+	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(dir, "reg.json"))
+
+	id, err := RequestPoolProvisionForProvider("Claude Team", common.PoolProviderClaude, "cliproxy")
+	require.NoError(t, err)
+	data, err := os.ReadFile(filepath.Join(dir, "requests", id+".json"))
+	require.NoError(t, err)
+	var request provisionRequest
+	require.NoError(t, common.Unmarshal(data, &request))
+	assert.Equal(t, common.PoolProviderClaude, request.Provider)
+	assert.Equal(t, "cliproxy", request.Mode)
+
+	_, err = RequestPoolProvisionForProvider("Invalid Claude", common.PoolProviderClaude, "gopool")
+	assert.ErrorContains(t, err, "CPA mode only")
+	_, err = RequestPoolProvisionForProvider("Unknown", "gemini", "cliproxy")
+	assert.ErrorContains(t, err, "unsupported pool provider")
+	_, err = RequestPoolProvisionForProvider("Unknown mode", common.PoolProviderCodex, "custom")
+	assert.ErrorContains(t, err, "unsupported pool build mode")
+}
+
 func TestPollPoolProvisionRegistersMode(t *testing.T) { // T3.5
 	dir := t.TempDir()
 	t.Setenv("POOL_PROVISION_DIR", dir)
@@ -131,6 +153,30 @@ func TestPollPoolProvisionRegistersMode(t *testing.T) { // T3.5
 	entry, ok := common.GetPoolEntry("1")
 	require.True(t, ok)
 	assert.Equal(t, "gopool", entry.BuildMode)
+}
+
+func TestPollPoolProvisionRegistersClaudeProvider(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("POOL_PROVISION_DIR", dir)
+	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(dir, "reg.json"))
+	id, err := RequestPoolProvisionForProvider("Claude Team", common.PoolProviderClaude, "cliproxy")
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "results"), 0o755))
+	result := provisionResult{
+		PoolID: id, Label: "Claude Team", Action: "create", Status: "ok",
+		MgmtURL: "http://cli-proxy-api-1:8319", MgmtSecret: "sec", Port: 8319, InternalKey: "key",
+		Provider: common.PoolProviderClaude, Mode: "cliproxy", Kind: common.PoolKindAdmin, GroupKey: id,
+	}
+	data, err := common.Marshal(result)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "results", id+".json"), data, 0o600))
+
+	status, err := PollPoolProvision(id)
+	require.NoError(t, err)
+	assert.Equal(t, "ready", status)
+	entry, ok := common.GetPoolEntry(id)
+	require.True(t, ok)
+	assert.Equal(t, common.PoolProviderClaude, entry.Provider)
 }
 
 func TestPrivatePoolProvisionPersistsOwnership(t *testing.T) {

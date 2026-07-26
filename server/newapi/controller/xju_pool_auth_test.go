@@ -119,6 +119,34 @@ func TestImportPoolAuthFilesUnconfiguredPool(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
+func TestClaudePoolRejectsManualCredentialImports(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dir := t.TempDir()
+	t.Setenv("POOL_REGISTRY_FILE", filepath.Join(dir, "registry.json"))
+	require.NoError(t, common.SavePoolRegistry([]common.PoolEntry{{
+		ID: "claude-only", Label: "Claude", Provider: common.PoolProviderClaude,
+		MgmtURL: "http://claude.invalid", MgmtSecret: "secret", Kind: common.PoolKindAdmin, GroupKey: "claude-only",
+	}}))
+
+	addRecorder := httptest.NewRecorder()
+	addContext, _ := gin.CreateTestContext(addRecorder)
+	addContext.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/pool/auth-files?pool=claude-only",
+		strings.NewReader(`{"name":"manual.json","content":"{}"}`),
+	)
+	AddPoolAuthFile(addContext)
+	assert.Equal(t, http.StatusBadRequest, addRecorder.Code)
+	assert.Contains(t, addRecorder.Body.String(), "OAuth login only")
+
+	importRecorder := httptest.NewRecorder()
+	importContext, _ := gin.CreateTestContext(importRecorder)
+	importContext.Request = httptest.NewRequest(http.MethodPost, "/api/pool/auth-files/import?pool=claude-only", nil)
+	ImportPoolAuthFiles(importContext)
+	assert.Equal(t, http.StatusBadRequest, importRecorder.Code)
+	assert.Contains(t, importRecorder.Body.String(), "OAuth login only")
+}
+
 func TestParsePoolAuthAccounts(t *testing.T) {
 	t.Run("bare codex object derives name from email", func(t *testing.T) {
 		items := parsePoolAuthAccounts(`{"email":"a@b.com","access_token":"tok"}`, "")

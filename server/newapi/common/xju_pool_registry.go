@@ -26,6 +26,9 @@ const (
 	PoolKindAdmin   = "admin"
 	PoolKindPrivate = "private"
 
+	PoolProviderCodex  = "codex"
+	PoolProviderClaude = "claude"
+
 	ContextKeyPrivatePoolID    = "xju_private_pool_id"
 	ContextKeyPrivatePoolScope = "xju_private_pool_scope"
 	ContextKeyPoolReadOnly     = "xju_pool_read_only"
@@ -36,6 +39,7 @@ const (
 type PoolInfo struct {
 	ID                      string `json:"id"`
 	Label                   string `json:"label"`
+	Provider                string `json:"provider"`
 	BuildMode               string `json:"build_mode,omitempty"`
 	OwnerUserID             int    `json:"owner_user_id,omitempty"`
 	OwnerUsername           string `json:"owner_username,omitempty"`
@@ -53,6 +57,7 @@ type PoolInfo struct {
 type PoolEntry struct {
 	ID                      string `json:"id"`
 	Label                   string `json:"label"`
+	Provider                string `json:"provider,omitempty"` // "codex"(legacy/default) | "claude"
 	MgmtURL                 string `json:"mgmt_url"`
 	MgmtSecret              string `json:"mgmt_secret"`
 	Port                    int    `json:"port,omitempty"`
@@ -113,6 +118,27 @@ func normalizePoolKind(kind string, ownerUserID int) string {
 	return PoolKindAdmin
 }
 
+// NormalizePoolProvider keeps legacy registry entries compatible: every pool
+// created before the provider field existed is a Codex/OpenAI account pool.
+// Invalid persisted values also degrade to Codex rather than making an existing
+// deployment disappear; new mutations are validated strictly by
+// AddPoolToRegistry and the provisioning service.
+func NormalizePoolProvider(provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), PoolProviderClaude) {
+		return PoolProviderClaude
+	}
+	return PoolProviderCodex
+}
+
+func IsSupportedPoolProvider(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case PoolProviderCodex, PoolProviderClaude:
+		return true
+	default:
+		return false
+	}
+}
+
 // PrivatePoolGroupKey returns the immutable routing group assigned to a user's
 // private pool. It is derived server-side and must never come from a client.
 func PrivatePoolGroupKey(ownerUserID int) string {
@@ -122,6 +148,7 @@ func PrivatePoolGroupKey(ownerUserID int) string {
 func normalizePoolEntry(entry PoolEntry) PoolEntry {
 	entry.ID = strings.TrimSpace(entry.ID)
 	entry.Label = strings.TrimSpace(entry.Label)
+	entry.Provider = NormalizePoolProvider(entry.Provider)
 	entry.MgmtURL = strings.TrimSpace(entry.MgmtURL)
 	entry.MgmtSecret = strings.TrimSpace(entry.MgmtSecret)
 	entry.BuildMode = strings.TrimSpace(entry.BuildMode)
@@ -150,6 +177,7 @@ func poolInfoFromEntry(entry PoolEntry) PoolInfo {
 	return PoolInfo{
 		ID:                      entry.ID,
 		Label:                   label,
+		Provider:                entry.Provider,
 		BuildMode:               buildMode,
 		OwnerUserID:             entry.OwnerUserID,
 		Kind:                    entry.Kind,
@@ -253,10 +281,10 @@ func ResolvePoolMgmt(poolID string) (baseURL string, secret string, ok bool) {
 func ListConfiguredPools() []PoolInfo {
 	pools := make([]PoolInfo, 0, 4)
 	if _, _, ok := ResolvePoolMgmt("default"); ok {
-		pools = append(pools, PoolInfo{ID: "default", Label: "Default", BuildMode: "cliproxy", Kind: PoolKindSystem})
+		pools = append(pools, PoolInfo{ID: "default", Label: "Default", Provider: PoolProviderCodex, BuildMode: "cliproxy", Kind: PoolKindSystem})
 	}
 	if _, _, ok := ResolvePoolMgmt("k12"); ok {
-		pools = append(pools, PoolInfo{ID: "k12", Label: "K12", BuildMode: "cliproxy", Kind: PoolKindSystem})
+		pools = append(pools, PoolInfo{ID: "k12", Label: "K12", Provider: PoolProviderCodex, BuildMode: "cliproxy", Kind: PoolKindSystem})
 	}
 	for _, e := range loadPoolRegistry() {
 		if strings.TrimSpace(e.MgmtSecret) == "" {
@@ -343,6 +371,10 @@ func AddPoolToRegistry(entry PoolEntry) error {
 	poolRegMutationMu.Lock()
 	defer poolRegMutationMu.Unlock()
 
+	rawProvider := strings.ToLower(strings.TrimSpace(entry.Provider))
+	if rawProvider != "" && !IsSupportedPoolProvider(rawProvider) {
+		return fmt.Errorf("unsupported pool provider: %q", entry.Provider)
+	}
 	entry = normalizePoolEntry(entry)
 	id := entry.ID
 	if id == "" || reservedPoolIDs[id] {
@@ -353,6 +385,9 @@ func AddPoolToRegistry(entry PoolEntry) error {
 	}
 	if entry.Kind == PoolKindPrivate && entry.OwnerUserID <= 0 {
 		return fmt.Errorf("private pool owner_user_id must be positive")
+	}
+	if entry.Kind == PoolKindPrivate && entry.Provider != PoolProviderCodex {
+		return fmt.Errorf("private pools support provider %q only", PoolProviderCodex)
 	}
 	if entry.Kind == PoolKindPrivate && entry.GroupKey != PrivatePoolGroupKey(entry.OwnerUserID) {
 		return fmt.Errorf("private pool group_key must be %q", PrivatePoolGroupKey(entry.OwnerUserID))
@@ -374,6 +409,27 @@ func AddPoolToRegistry(entry PoolEntry) error {
 	}
 	entries = append(entries, entry)
 	return SavePoolRegistry(entries)
+}
+
+// FindPoolProviderByRouting resolves the upstream account provider from the
+// durable routing identity stored in quota/log rows. Dynamic pools prefer their
+// channel id and fall back to the immutable group key. The two environment-
+// seeded pools predate registry channel ids and are always Codex pools.
+func FindPoolProviderByRouting(channelID int, groupKey string) (string, bool) {
+	groupKey = strings.TrimSpace(groupKey)
+	if groupKey == "default" || groupKey == "k12" {
+		return PoolProviderCodex, true
+	}
+	for _, entry := range loadPoolRegistry() {
+		entry = normalizePoolEntry(entry)
+		if channelID > 0 && entry.ChannelID == channelID {
+			return entry.Provider, true
+		}
+		if groupKey != "" && entry.GroupKey == groupKey {
+			return entry.Provider, true
+		}
+	}
+	return "", false
 }
 
 // GetPoolEntry returns a dynamic pool's full record (incl. channel id) by id.

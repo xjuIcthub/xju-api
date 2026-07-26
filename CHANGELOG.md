@@ -11,6 +11,8 @@
 
 ## 号池管理
 
+- **Codex / Claude 双 Provider 号池** —— 公共号池新建入口拆为 `CPA (Codex)`、`CPA (Claude)`、`go-pool` 三种；Provider 与构建模式写入 registry/provision 契约，Claude 仅允许公共 CPA 池并只开放 Anthropic OAuth 登录导入。新渠道按 Provider 从 CLIProxyAPI 拉取 Codex 或 Claude 模型目录，杜绝 Claude 池继承 GPT 模型。号池页显示 `Codex · GPT · OpenAI` / `Claude · Anthropic` 标识，Claude 池隐藏 Codex 专属订阅、Wham 额度、重置券与验活操作。
+- **Provider 独立用量看板** —— `quota_data` 新增 Provider 维度，旧数据兼容归入 Codex；缓存合并、落库聚合、用户/管理员模型统计与 Flow 查询均按 Provider 隔离。原「概览 / 数据看板」保持 Codex 口径，侧栏新增「概览（Claude）/ 数据看板（Claude）」复用同一套图表并只查询 Claude 用量；各号池继续使用独立 GroupRatio 计价。
 - **共享号池分级权限** —— 普通用户可从个人侧栏进入共享号池，但仅能查看脱敏后的账号状态、逐号测速和逐号查询额度；新增 / 导入 / 登录 / 启停 / 删除 / 重置 / 批量检测 / 自动维护均由管理员或 root 操作。普通用户自己的私人号池继续保留完整管理能力，role=10 管理员不能跨入他人私人池，root 保留全局排障权限。
 - **Anthropic / Claude Code 原生兼容** —— 现有 `cliproxy-pool-*` 渠道启动时原地、幂等升级为 Advanced Custom，保留渠道 ID、Group、Key、BaseURL、Models 与启停状态；`/v1/messages`（含 SSE、thinking、tool_use/tool_result）和 `/v1/messages/count_tokens` 保持 Anthropic 协议直达 CLIProxyAPI，同时保留 Chat Completions、Completions、Responses 与 Responses Compact。Claude Code 所需 `Anthropic-*`、`X-Claude-*`、`X-Stainless-*` 和 `User-Agent` 安全透传，用户鉴权头会被号池内部 Key 替换。
 - **私人号池完整工作台 + Web 登录导入** —— 「我的号池」保留四步引导，同时同步账号列表、上传 / ZIP / 粘贴、验活、启停删除、额度 / 重置券、自动清理等单池管理能力；用户和管理员号池工作台都提供「登录」按钮，可直接发起 OpenAI OAuth，复制浏览器失败页中的 localhost 回调地址即可入池，无需 SSH `-L`。管理员登录会绑定当前选中的号池。

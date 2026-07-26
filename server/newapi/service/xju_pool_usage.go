@@ -198,6 +198,9 @@ func GetPoolUsageSnapshots(poolID string) map[string]PoolAccountUsage {
 // RefreshPoolAccountUsageByName refreshes one account's quota on demand and
 // returns the fresh snapshot.
 func RefreshPoolAccountUsageByName(poolID, name string) (PoolAccountUsage, error) {
+	if err := EnsurePoolProvider(poolID, common.PoolProviderCodex, "ChatGPT account quota"); err != nil {
+		return PoolAccountUsage{}, err
+	}
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
 		return PoolAccountUsage{}, fmt.Errorf("pool management is not configured for pool: %s", poolID)
@@ -219,6 +222,9 @@ func RefreshPoolAccountUsageByName(poolID, name string) (PoolAccountUsage, error
 // ResetPoolAccountQuota consumes one reset credit on the account, then
 // refreshes and returns its quota snapshot so the UI shows the renewed windows.
 func ResetPoolAccountQuota(poolID, name string) (PoolAccountUsage, error) {
+	if err := EnsurePoolProvider(poolID, common.PoolProviderCodex, "ChatGPT quota reset"); err != nil {
+		return PoolAccountUsage{}, err
+	}
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
 		return PoolAccountUsage{}, fmt.Errorf("pool management is not configured for pool: %s", poolID)
@@ -301,6 +307,9 @@ var poolUsageJobs sync.Map // poolID -> *poolUsageJob
 func StartPoolUsageRefreshJob(poolID string, autoReset, onlyExhausted bool) (PoolUsageJobSnapshot, error) {
 	if !common.IsMasterNode {
 		return PoolUsageJobSnapshot{}, fmt.Errorf("quota refresh runs on the master node only")
+	}
+	if err := EnsurePoolProvider(poolID, common.PoolProviderCodex, "ChatGPT account quota"); err != nil {
+		return PoolUsageJobSnapshot{}, err
 	}
 	baseURL, secret, ok := common.ResolvePoolMgmt(poolID)
 	if !ok {
@@ -462,6 +471,9 @@ func runPoolUsageAutoRefreshOnce() {
 		return
 	}
 	for _, pool := range common.ListConfiguredPools() {
+		if common.NormalizePoolProvider(pool.Provider) != common.PoolProviderCodex {
+			continue
+		}
 		autoReset := common.PoolUsageAutoResetEnabled
 		if pool.Kind == common.PoolKindPrivate {
 			if !pool.UsageAutoRefreshEnabled {

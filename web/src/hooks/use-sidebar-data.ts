@@ -76,6 +76,16 @@ export function useSidebarData(): SidebarData {
             icon: LayoutDashboard,
           },
           {
+            title: t('Overview (Claude)'),
+            url: '/dashboard/overview-claude',
+            icon: Activity,
+          },
+          {
+            title: t('Dashboard (Claude)'),
+            url: '/dashboard/models-claude',
+            icon: LayoutDashboard,
+          },
+          {
             title: t('API Keys'),
             url: '/keys',
             icon: Key,

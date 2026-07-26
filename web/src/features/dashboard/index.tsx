@@ -183,6 +183,12 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   models: {
     titleKey: 'Model Call Analytics',
   },
+  'overview-claude': {
+    titleKey: 'Overview (Claude)',
+  },
+  'models-claude': {
+    titleKey: 'Dashboard (Claude)',
+  },
   flow: {
     titleKey: 'Flow',
   },
@@ -198,6 +204,13 @@ export function Dashboard() {
   const userRole = useAuthStore((state) => state.auth.user?.role)
   const activeSection = (params.section ??
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
+  const dashboardProvider = activeSection.endsWith('-claude')
+    ? 'claude'
+    : 'codex'
+  const isOverviewSection =
+    activeSection === 'overview' || activeSection === 'overview-claude'
+  const isModelsSection =
+    activeSection === 'models' || activeSection === 'models-claude'
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
   const [dataLoading, setDataLoading] = useState(false)
@@ -245,13 +258,20 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
-  const visibleSections = useMemo(
-    () =>
-      DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
-      ),
-    [isAdmin]
-  )
+  const visibleSections = useMemo(() => {
+    if (dashboardProvider === 'claude') {
+      return DASHBOARD_SECTION_IDS.filter(
+        (section) => section === 'models-claude'
+      )
+    }
+    return DASHBOARD_SECTION_IDS.filter(
+      (section) =>
+        section !== 'overview' &&
+        section !== 'overview-claude' &&
+        section !== 'models-claude' &&
+        (section !== 'users' || isAdmin)
+    )
+  }, [dashboardProvider, isAdmin])
   const handleSectionChange = useCallback(
     (section: string) => {
       void navigate({
@@ -261,23 +281,21 @@ export function Dashboard() {
     },
     [navigate]
   )
-  const showSectionTabs =
-    activeSection !== 'overview' && visibleSections.length > 1
-  const modelActions =
-    activeSection === 'models' ? (
-      <>
-        <ModelsChartPreferences
-          preferences={chartPreferences}
-          onPreferencesChange={handleChartPreferencesChange}
-        />
-        <ModelsFilter
-          preferences={chartPreferences}
-          currentFilters={modelFilters}
-          onFilterChange={handleFilterChange}
-          onReset={handleResetFilters}
-        />
-      </>
-    ) : null
+  const showSectionTabs = !isOverviewSection && visibleSections.length > 1
+  const modelActions = isModelsSection ? (
+    <>
+      <ModelsChartPreferences
+        preferences={chartPreferences}
+        onPreferencesChange={handleChartPreferencesChange}
+      />
+      <ModelsFilter
+        preferences={chartPreferences}
+        currentFilters={modelFilters}
+        onFilterChange={handleFilterChange}
+        onReset={handleResetFilters}
+      />
+    </>
+  ) : null
   const flowActions =
     activeSection === 'flow' ? (
       <>
@@ -322,7 +340,7 @@ export function Dashboard() {
       <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
       <SectionPageLayout.Content>
         <div className='space-y-3 sm:space-y-4'>
-          {activeSection !== 'overview' && (
+          {!isOverviewSection && (
             <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
               {showSectionTabs ? (
                 <Tabs value={activeSection} onValueChange={handleSectionChange}>
@@ -344,18 +362,21 @@ export function Dashboard() {
               )}
             </div>
           )}
-          {activeSection === 'overview' && <OverviewDashboard />}
-          {activeSection === 'models' && (
+          {isOverviewSection && (
+            <OverviewDashboard provider={dashboardProvider} />
+          )}
+          {isModelsSection && (
             <>
               <FadeIn>
                 <Suspense fallback={<LogStatCardsFallback />}>
                   <LazyLogStatCards
                     filters={modelFilters}
+                    provider={dashboardProvider}
                     onDataUpdate={handleDataUpdate}
                   />
                 </Suspense>
               </FadeIn>
-              {isAdmin && (
+              {isAdmin && dashboardProvider === 'codex' && (
                 <FadeIn delay={0.05}>
                   <Suspense fallback={<PerformanceOverviewFallback />}>
                     <LazyPerformanceOverview />
