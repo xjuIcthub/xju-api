@@ -45,14 +45,6 @@ export async function getRechargeInfo(): Promise<RechargeInfo> {
   return response.data.data
 }
 
-export async function getPersonalInviteCode(): Promise<string> {
-  const response = await api.get('/api/user/aff')
-  if (!response.data?.success) {
-    throw new Error(response.data?.message || 'Failed to load invitation code')
-  }
-  return String(response.data?.data ?? '')
-}
-
 export async function getRechargeHistory(): Promise<RechargeRecord[]> {
   const response = await api.get('/api/user/topup/self?p=1&page_size=8')
   if (!response.data?.success || !response.data?.data) {

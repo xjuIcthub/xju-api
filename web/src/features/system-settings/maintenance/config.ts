@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { XJU_SIDEBAR_MODULE_DEFAULTS } from '@/registry/xju-modules'
+
 // xju-api:prune (PLAN.md §5.2): pricing/rankings/about public pages removed,
 // so header-nav config narrows to plain booleans for the surviving links.
 export type HeaderNavModulesConfig = {
@@ -41,26 +43,32 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
 // xju-api:prune (PLAN.md §5.2): chat/topup/redemption/subscription module
 // switches removed with their features; must stay in sync with
 // DEFAULT_SIDEBAR_MODULES in src/hooks/use-sidebar-config.ts.
-export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
-  console: {
-    enabled: true,
-    detail: true,
-    token: true,
-    log: true,
-    docs: true,
-  },
-  personal: {
-    enabled: true,
-    personal: true,
-  },
-  admin: {
-    enabled: true,
-    channel: true,
-    pool: true,
-    announcements: true,
-    user: true,
-  },
-}
+export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = (() => {
+  const base: SidebarModulesAdminConfig = {
+    console: {
+      enabled: true,
+      detail: true,
+      token: true,
+      log: true,
+    },
+    personal: {
+      enabled: true,
+      personal: true,
+    },
+    admin: {
+      enabled: true,
+      channel: true,
+      user: true,
+    },
+  }
+
+  // xju-api:inject — 与运行时侧栏使用同一注册中心，避免“恢复默认”漏掉自有模块。
+  Object.entries(XJU_SIDEBAR_MODULE_DEFAULTS).forEach(([section, modules]) => {
+    base[section] = { ...(base[section] ?? { enabled: true }), ...modules }
+  })
+
+  return base
+})()
 
 const toBoolean = (value: unknown, fallback: boolean): boolean => {
   if (typeof value === 'boolean') return value

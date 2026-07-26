@@ -11,6 +11,7 @@ import {
   BookOpenText,
   Box,
   Boxes,
+  Gift,
   Megaphone,
   SlidersHorizontal,
 } from 'lucide-react'
@@ -50,6 +51,11 @@ export const XJU_PERSONAL_NAV_ITEMS = [
     url: '/recharge' as const,
     icon: BadgeDollarSign,
   },
+  {
+    titleKey: 'Invitation Gifts',
+    url: '/invite-rewards' as const,
+    icon: Gift,
+  },
 ]
 
 /** 侧栏 admin 组注入项(use-sidebar-data.ts 消费;title 在消费点过 t())。 */
@@ -76,7 +82,12 @@ export const XJU_SIDEBAR_MODULE_DEFAULTS: Record<
   Record<string, boolean>
 > = {
   console: { docs: true },
-  personal: { pool: true, private_pool: true, recharge: true },
+  personal: {
+    pool: true,
+    private_pool: true,
+    recharge: true,
+    invite_rewards: true,
+  },
   admin: { default_pricing: true, announcements: true },
 }
 
@@ -89,6 +100,7 @@ export const XJU_URL_TO_CONFIG: Record<
   '/pool': { section: 'personal', module: 'pool' },
   '/my-pool': { section: 'personal', module: 'private_pool' },
   '/recharge': { section: 'personal', module: 'recharge' },
+  '/invite-rewards': { section: 'personal', module: 'invite_rewards' },
   '/default-pricing': { section: 'admin', module: 'default_pricing' },
   '/announcements': {
     section: 'admin',
@@ -121,6 +133,11 @@ export const XJU_SIDEBAR_MODULE_META: Record<
     recharge: {
       titleKey: 'Balance Recharge',
       descriptionKey: 'Recharge the balance used by the Default shared pool.',
+    },
+    invite_rewards: {
+      titleKey: 'Invitation Gifts',
+      descriptionKey:
+        'Join invitation events, share your link, and track reward milestones.',
     },
   },
   admin: {

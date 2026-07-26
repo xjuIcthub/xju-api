@@ -32,6 +32,8 @@ export const STATIC_I18N_KEYS = [
   'Back to Dashboard',
   'Announcement Publishing',
   'Publish and manage platform announcements.',
+  'Invitation Gifts',
+  'Join invitation events, share your link, and track reward milestones.',
   'Auto-disable rules',
   'Channel health checks',
   'Request retry',

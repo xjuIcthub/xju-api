@@ -10,14 +10,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeDollarSign,
   Clock3,
-  Copy,
   Crown,
   Gift,
   History,
   KeyRound,
   ShieldCheck,
   Sparkles,
-  UserPlus,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,7 +35,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getSelf } from '@/lib/api'
-import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import {
   DEFAULT_POOL_REDEMPTION_RATE_LABEL,
@@ -49,7 +46,6 @@ import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import {
   getRechargeHistory,
   getRechargeInfo,
-  getPersonalInviteCode,
   redeemRechargeCode,
   type RechargeInfo,
 } from './api'
@@ -99,10 +95,6 @@ export function Recharge() {
     queryKey: ['recharge', 'history'],
     queryFn: getRechargeHistory,
   })
-  const referralQuery = useQuery({
-    queryKey: ['recharge', 'invite-code'],
-    queryFn: getPersonalInviteCode,
-  })
   const info = infoQuery.data
   const providers = useMemo(
     () =>
@@ -111,23 +103,6 @@ export function Recharge() {
         .filter((name): name is string => Boolean(name)),
     [info?.pay_methods]
   )
-  const referralCode =
-    userQuery.data?.aff_code?.trim() || referralQuery.data?.trim() || ''
-  const referralLink = useMemo(() => {
-    if (!referralCode || typeof window === 'undefined') return ''
-    return `${window.location.origin}/register?aff=${encodeURIComponent(referralCode)}`
-  }, [referralCode])
-
-  const copyReferralLink = async () => {
-    if (!referralLink) return
-    const copied = await copyToClipboard(referralLink)
-    if (copied) {
-      toast.success(t('Invitation link copied'))
-    } else {
-      toast.error(t('Failed to copy invitation link'))
-    }
-  }
-
   const redeemMutation = useMutation({
     mutationFn: () => redeemRechargeCode(code.trim()),
     onSuccess: async (added) => {
@@ -303,76 +278,6 @@ export function Recharge() {
               </CardContent>
             </Card>
           </div>
-
-          <Card data-card-hover='false'>
-            <CardHeader>
-              <CardTitle className='flex items-center gap-2'>
-                <UserPlus className='size-5 text-violet-600 dark:text-violet-300' />
-                {t('Invite rewards')}
-              </CardTitle>
-              <CardDescription>
-                {t(
-                  'Share your personal invitation link. Rewards are credited directly to the Default pool balance after registration succeeds.'
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='grid gap-4 lg:grid-cols-[1.1fr_1fr]'>
-              <div className='space-y-3'>
-                <div className='grid gap-2 sm:grid-cols-[1fr_auto]'>
-                  <Input
-                    readOnly
-                    value={referralLink}
-                    placeholder={t('Invitation link is being prepared')}
-                    className='font-mono text-xs'
-                  />
-                  <Button
-                    variant='outline'
-                    onClick={copyReferralLink}
-                    disabled={!referralLink}
-                  >
-                    <Copy data-icon='inline-start' />
-                    {t('Copy link')}
-                  </Button>
-                </div>
-                <div className='flex flex-wrap items-center gap-2 text-xs'>
-                  <StatusBadge
-                    label={`${t('Invitation code')}: ${referralCode || '—'}`}
-                    variant='info'
-                    copyText={referralCode}
-                    copyable={Boolean(referralCode)}
-                  />
-                  <StatusBadge
-                    label={`${t('Successful invites')}: ${userQuery.data?.aff_count ?? 0}`}
-                    variant='neutral'
-                    copyable={false}
-                  />
-                </div>
-              </div>
-
-              <div className='bg-muted/30 rounded-xl border p-4'>
-                <ul className='space-y-2 text-sm'>
-                  <li className='flex justify-between gap-3'>
-                    <span>{t('Every successful invite')}</span>
-                    <span className='font-medium'>
-                      {t('Both users receive $5')}
-                    </span>
-                  </li>
-                  <li className='flex justify-between gap-3'>
-                    <span>{t('3 successful invites')}</span>
-                    <span className='font-medium'>{t('Extra $10')}</span>
-                  </li>
-                  <li className='flex justify-between gap-3'>
-                    <span>{t('5 successful invites')}</span>
-                    <span className='font-medium'>{t('Extra $20')}</span>
-                  </li>
-                  <li className='flex justify-between gap-3'>
-                    <span>{t('10 successful invites')}</span>
-                    <span className='font-medium'>{t('Extra $50')}</span>
-                  </li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
 
           <div className='grid gap-4 lg:grid-cols-2'>
             <Card data-card-hover='false'>
