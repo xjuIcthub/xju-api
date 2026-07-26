@@ -7,6 +7,7 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 */
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
   CheckCircle2,
@@ -19,8 +20,8 @@ import {
   UserPlus,
   UsersRound,
 } from 'lucide-react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useMemo, useRef, useState } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -93,8 +94,6 @@ function getInviteProgress(inviteCount: number) {
 export function InviteRewards() {
   const { t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
-  const [hasJoined, setHasJoined] = useState(false)
-  const invitePanelRef = useRef<HTMLDivElement>(null)
   const authUser = useAuthStore((state) => state.auth.user)
 
   const userQuery = useQuery({
@@ -132,19 +131,6 @@ export function InviteRewards() {
     } else {
       toast.error(t('Failed to copy invitation link'))
     }
-  }
-
-  const joinActivity = () => {
-    if (!hasJoined) {
-      setHasJoined(true)
-      toast.success(t('Your invitation entry is ready'))
-    }
-    window.requestAnimationFrame(() => {
-      invitePanelRef.current?.scrollIntoView({
-        behavior: shouldReduceMotion ? 'auto' : 'smooth',
-        block: 'center',
-      })
-    })
   }
 
   return (
@@ -223,7 +209,7 @@ export function InviteRewards() {
                 </h1>
                 <p className='mt-5 max-w-xl text-sm leading-7 text-[#fff3dc]/85 sm:text-base'>
                   {t(
-                    'Join now to unlock your personal invitation link. Standard invitation rewards continue to be credited automatically after successful registration.'
+                    'Enter the independent wheel challenge. Invite one effective new friend to earn one spin and keep moving your lucky progress toward the grand prize.'
                   )}
                 </p>
 
@@ -236,7 +222,7 @@ export function InviteRewards() {
                   >
                     <Button
                       size='lg'
-                      onClick={joinActivity}
+                      render={<Link to='/invite-rewards/activity' />}
                       className='group relative h-14 overflow-hidden rounded-full border border-[#fff1c9] bg-[linear-gradient(135deg,#fff3c6_0%,#ffc85b_45%,#fff0b2_100%)] px-7 text-base font-bold text-[#8a1018] shadow-[0_12px_34px_rgba(78,2,10,0.3)] hover:bg-[linear-gradient(135deg,#fff8dd_0%,#ffd576_45%,#fff4c6_100%)]'
                     >
                       {!shouldReduceMotion && (
@@ -252,22 +238,14 @@ export function InviteRewards() {
                           }}
                         />
                       )}
-                      {hasJoined ? (
-                        <CheckCircle2 data-icon='inline-start' />
-                      ) : (
-                        <Gift data-icon='inline-start' />
-                      )}
-                      <span className='relative'>
-                        {hasJoined
-                          ? t('View my invitation entry')
-                          : t('Join the event')}
-                      </span>
+                      <Gift data-icon='inline-start' />
+                      <span className='relative'>{t('Join the event')}</span>
                       <ArrowRight className='relative size-4 transition-transform group-hover:translate-x-0.5' />
                     </Button>
                   </motion.div>
                   <span className='text-xs leading-5 text-[#ffe7b0]/78'>
                     {t(
-                      'Grand-prize assistance and settlement rules will be announced before the official launch.'
+                      'The activity page is a gameplay preview. It does not issue real rewards yet.'
                     )}
                   </span>
                 </div>
@@ -401,50 +379,7 @@ export function InviteRewards() {
             </div>
           </section>
 
-          <AnimatePresence initial={false}>
-            {hasJoined && (
-              <motion.div
-                initial={{ opacity: 0, y: -12, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.3 }}
-                role='status'
-                aria-live='polite'
-                className='flex flex-col gap-3 rounded-2xl border border-red-200 bg-[linear-gradient(100deg,#fff8ed,#fff1e7)] px-4 py-3.5 text-red-950 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/60 dark:bg-[linear-gradient(100deg,rgba(93,16,25,0.42),rgba(110,36,20,0.3))] dark:text-red-50'
-              >
-                <div className='flex items-start gap-3'>
-                  <div className='mt-0.5 rounded-full bg-red-600 p-1.5 text-white'>
-                    <CheckCircle2 className='size-4' />
-                  </div>
-                  <div>
-                    <div className='font-semibold'>
-                      {t('Your invitation entry is ready')}
-                    </div>
-                    <div className='mt-0.5 text-xs text-red-800/70 dark:text-red-100/65'>
-                      {t(
-                        'Share your personal link below to start inviting friends.'
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  onClick={copyReferralLink}
-                  disabled={!referralLink}
-                  className='border-red-300 bg-white/65 text-red-800 hover:bg-white hover:text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100'
-                >
-                  <Copy data-icon='inline-start' />
-                  {t('Copy invitation link')}
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div
-            ref={invitePanelRef}
-            className='grid gap-5 lg:grid-cols-[1.15fr_0.85fr]'
-          >
+          <div className='grid gap-5 lg:grid-cols-[1.15fr_0.85fr]'>
             <Card data-card-hover='false' className='overflow-hidden'>
               <CardHeader className='border-b bg-[linear-gradient(135deg,rgba(220,38,38,0.07),rgba(245,158,11,0.08))]'>
                 <CardTitle className='flex items-center gap-2'>
