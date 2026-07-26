@@ -33,14 +33,14 @@ export const XJU_CODEX_DEFAULT_MODELS = {
 } as const
 
 export type AppType = 'claude' | 'codex' | 'gemini'
-export type CCSwitchPoolProvider = 'codex' | 'claude'
+export type ClaudeCodePoolProvider = 'codex' | 'claude'
 export type Models = Record<string, string>
 
 export function endpointForApp(app: AppType): string {
   return app === 'codex' ? `${PUBLIC_API_ENDPOINT}/v1` : PUBLIC_API_ENDPOINT
 }
 
-export function getCCSwitchDefaultModels(provider?: CCSwitchPoolProvider) {
+export function getClaudeCodeDefaultModels(provider?: ClaudeCodePoolProvider) {
   return provider === 'claude'
     ? XJU_CLAUDE_DEFAULT_MODELS
     : XJU_CODEX_DEFAULT_MODELS

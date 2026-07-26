@@ -83,6 +83,7 @@ export function DataTableRowActions<TData>({
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
   const isCodexPool = provider === 'codex'
   const isClaudePool = provider === 'claude'
+  const supportsClaudeCode = isCodexPool || isClaudePool
 
   const toggleLabel = isEnabled ? t('Disable') : t('Enable')
 
@@ -155,11 +156,12 @@ export function DataTableRowActions<TData>({
   }
 
   const openClaudeConfig = async () => {
-    if (!isClaudePool) return
+    if (!supportsClaudeCode) return
     const realKey = await resolveRealKey(apiKey.id)
     if (!realKey) return
     setResolvedKey(realKey)
     setCurrentRow(apiKey)
+    setCurrentProvider(provider)
     setOpen('claude-config')
   }
 
@@ -191,7 +193,7 @@ export function DataTableRowActions<TData>({
               variant='ghost'
               size='icon-sm'
               onClick={openClaudeConfig}
-              disabled={isRealKeyLoading || !isClaudePool}
+              disabled={isRealKeyLoading || !supportsClaudeCode}
               aria-label={t('Claude Config')}
             />
           }
@@ -316,7 +318,10 @@ export function DataTableRowActions<TData>({
             <IconCodex className='size-4' />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={openClaudeConfig} disabled={!isClaudePool}>
+        <DropdownMenuItem
+          onClick={openClaudeConfig}
+          disabled={!supportsClaudeCode}
+        >
           {t('Claude Config')}
           <DropdownMenuShortcut>
             <Anthropic className='size-4' />

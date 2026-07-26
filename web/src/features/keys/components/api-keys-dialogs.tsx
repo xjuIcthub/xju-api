@@ -50,6 +50,7 @@ export function ApiKeysDialogs() {
         open={open === 'claude-config'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         tokenKey={resolvedKey}
+        provider={currentProvider}
       />
     </>
   )

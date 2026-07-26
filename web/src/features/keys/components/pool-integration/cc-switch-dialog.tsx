@@ -37,7 +37,7 @@ import {
   buildCCSwitchURL,
   buildClaudeConfig,
   endpointForApp,
-  getCCSwitchDefaultModels,
+  getClaudeCodeDefaultModels,
   type AppType,
   type Models,
 } from './cc-switch-config'
@@ -85,7 +85,7 @@ interface Props {
 
 export function CCSwitchDialog(props: Props) {
   const { t } = useTranslation()
-  const providerDefaults = getCCSwitchDefaultModels(props.provider)
+  const providerDefaults = getClaudeCodeDefaultModels(props.provider)
   const [app, setApp] = useState<AppType>('claude')
   const [name, setName] = useState<string>(APP_CONFIGS.claude.defaultName)
   const [models, setModels] = useState<Models>({

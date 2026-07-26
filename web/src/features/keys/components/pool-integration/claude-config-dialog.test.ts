@@ -53,4 +53,20 @@ describe('Claude Code configuration', () => {
       skipDangerousModePermissionPrompt: true,
     })
   })
+
+  test('uses GPT role mappings for a Codex pool key', () => {
+    const config = JSON.parse(
+      buildClaudeSettingsJson('https://xju.example/', 'test-key', 'codex')
+    )
+
+    expect(config.env).toEqual({
+      ANTHROPIC_AUTH_TOKEN: 'sk-test-key',
+      ANTHROPIC_BASE_URL: 'https://xju.example',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5.6-luna',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5.6-sol',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5.6-terra',
+      ANTHROPIC_MODEL: 'gpt-5.6-sol',
+      CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: '1',
+    })
+  })
 })

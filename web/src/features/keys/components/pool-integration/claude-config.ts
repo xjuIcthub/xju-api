@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { PUBLIC_API_ENDPOINT, buildClaudeConfig } from './cc-switch-config'
+import {
+  PUBLIC_API_ENDPOINT,
+  XJU_CLAUDE_DEFAULT_MODELS,
+  buildClaudeConfig,
+  getClaudeCodeDefaultModels,
+  type ClaudeCodePoolProvider,
+} from './cc-switch-config'
 
 function normalizeToken(tokenKey: string): string {
   if (!tokenKey) return ''
@@ -25,10 +31,19 @@ function normalizeToken(tokenKey: string): string {
 
 export function buildClaudeSettingsJson(
   baseUrl: string,
-  tokenKey: string
+  tokenKey: string,
+  provider?: ClaudeCodePoolProvider
 ): string {
   const endpoint = (baseUrl || PUBLIC_API_ENDPOINT).replace(/\/+$/, '')
-  const config = buildClaudeConfig(normalizeToken(tokenKey), {}, endpoint)
+  const defaults = provider
+    ? getClaudeCodeDefaultModels(provider)
+    : XJU_CLAUDE_DEFAULT_MODELS
+  const config = buildClaudeConfig(
+    normalizeToken(tokenKey),
+    {},
+    endpoint,
+    defaults
+  )
   return JSON.stringify(
     {
       enableWorkflows: true,

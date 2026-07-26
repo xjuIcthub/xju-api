@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dialog'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 
+import type { ApiKeyProvider } from '../../lib'
 import { getPublicServerAddress } from '../../lib/server-address'
 import { buildClaudeSettingsJson } from './claude-config'
 
@@ -37,6 +38,7 @@ type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   tokenKey: string
+  provider?: ApiKeyProvider
 }
 
 function CopyBlock(props: { title: string; hint: string; content: string }) {
@@ -93,7 +95,11 @@ export function ClaudeConfigDialog(props: Props) {
         <CopyBlock
           title={t('settings.json')}
           hint={t('Save as ~/.claude/settings.json')}
-          content={buildClaudeSettingsJson(baseUrl, props.tokenKey)}
+          content={buildClaudeSettingsJson(
+            baseUrl,
+            props.tokenKey,
+            props.provider
+          )}
         />
 
         <p className='text-muted-foreground text-xs'>

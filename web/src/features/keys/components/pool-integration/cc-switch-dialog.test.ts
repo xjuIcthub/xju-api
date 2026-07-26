@@ -22,7 +22,7 @@ import {
   XJU_CODEX_DEFAULT_MODELS,
   buildCCSwitchURL,
   buildClaudeConfig,
-  getCCSwitchDefaultModels,
+  getClaudeCodeDefaultModels,
 } from './cc-switch-config'
 
 describe('XJU Claude defaults', () => {
@@ -54,7 +54,7 @@ describe('XJU Claude defaults', () => {
 
 describe('XJU Codex pool defaults', () => {
   test('maps Sol, Terra and Luna to the Claude Code roles', () => {
-    const defaults = getCCSwitchDefaultModels('codex')
+    const defaults = getClaudeCodeDefaultModels('codex')
     expect(defaults).toEqual(XJU_CODEX_DEFAULT_MODELS)
     expect(buildClaudeConfig('sk-test', {}, undefined, defaults)).toEqual({
       env: {
@@ -69,7 +69,7 @@ describe('XJU Codex pool defaults', () => {
   })
 
   test('keeps the GPT role mapping in the CC Switch Deep Link', () => {
-    const defaults = getCCSwitchDefaultModels('codex')
+    const defaults = getClaudeCodeDefaultModels('codex')
     const url = new URL(
       buildCCSwitchURL('claude', 'XJU API - Claude', {}, 'sk-test', defaults)
     )
