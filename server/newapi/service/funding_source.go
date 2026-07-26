@@ -33,6 +33,16 @@ func (p *PrivatePoolFunding) PreConsume(int) error { return nil }
 func (p *PrivatePoolFunding) Settle(int) error     { return nil }
 func (p *PrivatePoolFunding) Refund() error        { return nil }
 
+// ClaudePoolFunding is the switch-controlled shared Claude-pool equivalent of
+// PrivatePoolFunding. It preserves token settlement and usage accounting while
+// deliberately leaving the user's wallet/subscription untouched.
+type ClaudePoolFunding struct{}
+
+func (p *ClaudePoolFunding) Source() string       { return BillingSourceClaudePool }
+func (p *ClaudePoolFunding) PreConsume(int) error { return nil }
+func (p *ClaudePoolFunding) Settle(int) error     { return nil }
+func (p *ClaudePoolFunding) Refund() error        { return nil }
+
 // ---------------------------------------------------------------------------
 // WalletFunding — 钱包资金来源实现
 // ---------------------------------------------------------------------------

@@ -5543,6 +5543,13 @@
     "Open the {{provider}} login page": "Open the {{provider}} login page",
     "Complete login in the new tab. It will automatically redirect to the localhost callback.": "Complete login in the new tab. It will automatically redirect to the localhost callback.",
     "Open {{provider}} login": "Open {{provider}} login",
-    "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.": "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts."
+    "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.": "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.",
+    "Claude Config": "Claude Config",
+    "settings.json": "settings.json",
+    "Save as ~/.claude/settings.json": "Save as ~/.claude/settings.json",
+    "Save this file for Claude Code. The endpoint does not include /v1 because Claude Code appends /v1/messages automatically.": "Save this file for Claude Code. The endpoint does not include /v1 because Claude Code appends /v1/messages automatically.",
+    "The API key in this file is the full key. Treat settings.json as a secret and do not share it.": "The API key in this file is the full key. Treat settings.json as a secret and do not share it.",
+    "Unlimited Claude Pool Quota": "Unlimited Claude Pool Quota",
+    "When enabled, Claude pool requests still record usage and consume optional API key quota, but do not deduct user wallet or subscription quota.": "When enabled, Claude pool requests still record usage and consume optional API key quota, but do not deduct user wallet or subscription quota."
   }
 }

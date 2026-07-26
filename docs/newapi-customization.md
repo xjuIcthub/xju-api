@@ -30,7 +30,7 @@
 - `features/pool/` —— 管理员号池管理页：公共池支持 `CPA (Codex)` / `CPA (Claude)` / `go-pool`，Provider 品牌标识与能力门控；Codex 支持 OAuth/ZIP/JSON，Claude 仅 Anthropic OAuth。`codex-login-button.tsx` 已泛化为 Provider-aware OAuth 交互，同时保持私人号池 Codex 登录复用
 - `features/private-pool/` —— 用户「我的号池」引导 + 单池管理工作台 + owner-scoped Codex Web 登录导入
 - `features/invite-codes/` —— 邀请码(`api.ts`、`invite-code-dialog.tsx`、`auth-section.tsx`)
-- `features/keys/components/pool-integration/` —— `cc-switch-dialog.tsx`（Claude 默认、标准 Config JSON / Deep Link、Token 本地遮罩）、`codex-config-dialog.tsx`
+- `features/keys/components/pool-integration/` —— `cc-switch-dialog.tsx`（Claude 默认、标准 Config JSON / Deep Link、Token 本地遮罩）、`codex-config-dialog.tsx`、`claude-config-dialog.tsx`（当前部署地址的 `~/.claude/settings.json`）
 - `assets/vendor/cc-switch/` —— CC Switch 官方 MIT Logo、原许可证与固定提交来源说明
 - `routes/_authenticated/pool/` —— /pool 路由
 
@@ -57,10 +57,11 @@
 - `main.go` —— 启动期 `ReconcilePoolChannelCompatibility()`、`StartPoolAutoCleanTask()`；embed 单主题化(edit)
 - `router/api-router.go` —— `/api/pool` 路由组(RootAuth)
 - `router/relay-router.go`、`controller/claude_count_tokens.go` —— 原生 `/v1/messages/count_tokens` 走 TokenAuth / Distribute / 私人号池隔离，但不进入生成计费
-- `common/constants.go` —— `InviteCodeRequired` / `PoolAutoCleanEnabled` / `PoolAutoCleanHours` 三变量
-- `model/option.go` —— 三键 OptionMap 登记 + 生效通道(契约注释在文件内)
+- `common/constants.go` —— 邀请码、号池自动维护与 `ClaudePoolUnlimitedEnabled` 等运行时选项
+- `model/option.go` —— 自有 OptionMap 登记 + 热更新生效通道(契约注释在文件内)
 - `controller/user.go` —— Register 调用 `service.ConsumeInviteCodeForRegistration`(edit)
-- `middleware/auth.go`、`relay/common/relay_info.go`、`service/billing*.go` / `quota.go` / `task_billing.go` —— 冻结私人号池免用户余额标记，使用 `private_pool` 计费来源；公用号池仍走钱包/订阅
+- `controller/group.go`、`features/keys/lib/api-key-groups.ts` —— API 密钥分组从 registry 中的可用公共池生成，显示 Provider 身份，同时保留 owner-bound 私人池与历史脏分组隔离
+- `middleware/auth.go`、`relay/common/relay_info.go`、`service/billing*.go` / `quota.go` / `task_billing.go` —— 冻结私人号池免用户余额标记，使用 `private_pool` 计费来源；开关开启时 Claude 公共池使用 `claude_pool`，两者均保留 Token 额度与用量计量
 - `service/xju_pool_channel.go`、`service/xju_pool_channel_compat.go`、`relay/channel/api_request.go` —— 号池 Advanced Custom 六路由、启动幂等升级、Claude Code Header 白名单与用户鉴权头替换
 
 ## 30 天月卡档(留位)

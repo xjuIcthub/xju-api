@@ -87,9 +87,10 @@ func calculateAudioQuota(info QuotaInfo) (int, *common.QuotaClamp) {
 }
 
 func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) error {
-	privatePoolBalanceExempt := IsPrivatePoolBalanceExempt(relayInfo)
-	if privatePoolBalanceExempt {
-		relayInfo.BillingSource = BillingSourcePrivatePool
+	balanceExemptSource := balanceExemptBillingSource(relayInfo)
+	balanceExempt := balanceExemptSource != ""
+	if balanceExempt {
+		relayInfo.BillingSource = balanceExemptSource
 	}
 	if relayInfo.UsePrice {
 		return nil
@@ -139,10 +140,10 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	quota, clamp := calculateAudioQuota(quotaInfo)
 	noteQuotaClamp(relayInfo, clamp)
 
-	// xju-api:inject — realtime requests against a private pool are still
-	// priced, token-metered and logged, but never rejected by shared-pool user
-	// balance. Public/shared pools keep the original check.
-	if !privatePoolBalanceExempt {
+	// xju-api:inject — realtime requests against a balance-exempt pool are still
+	// priced, token-metered and logged, but never rejected by the user's wallet
+	// or subscription balance.
+	if !balanceExempt {
 		userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
 		if err != nil {
 			return err
@@ -420,10 +421,10 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int, sendEmail bool) (err error) {
 
 	// 1) Consume from wallet quota OR subscription item
-	privatePoolBalanceExempt := relayInfo != nil && relayInfo.BillingSource == BillingSourcePrivatePool
-	if privatePoolBalanceExempt {
-		// xju-api:inject — no wallet/subscription delta for owner-funded upstream
-		// pools. Token usage and all downstream accounting remain unchanged.
+	balanceExempt := relayInfo != nil && isBalanceExemptBillingSource(relayInfo.BillingSource)
+	if balanceExempt {
+		// xju-api:inject — no wallet/subscription delta for a balance-exempt
+		// upstream pool. Token usage and all downstream accounting remain unchanged.
 	} else if relayInfo != nil && relayInfo.BillingSource == BillingSourceSubscription {
 		if relayInfo.SubscriptionId == 0 {
 			return errors.New("subscription id is missing")
@@ -458,7 +459,7 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 	}
 
-	if sendEmail && !privatePoolBalanceExempt {
+	if sendEmail && !balanceExempt {
 		if (quota + preConsumedQuota) != 0 {
 			checkAndSendQuotaNotify(relayInfo, quota, preConsumedQuota)
 		}

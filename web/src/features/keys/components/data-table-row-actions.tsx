@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Anthropic } from '@lobehub/icons'
 import type { Row } from '@tanstack/react-table'
 import {
   Trash2,
@@ -145,6 +146,14 @@ export function DataTableRowActions<TData>({
     setOpen('cc-switch')
   }
 
+  const openClaudeConfig = async () => {
+    const realKey = await resolveRealKey(apiKey.id)
+    if (!realKey) return
+    setResolvedKey(realKey)
+    setCurrentRow(apiKey)
+    setOpen('claude-config')
+  }
+
   return (
     <div className='-ml-1.5 flex items-center gap-1'>
       {/* Codex config is the primary self-serve action for a day-card user, so
@@ -163,6 +172,27 @@ export function DataTableRowActions<TData>({
           <IconCodex className='size-4' />
         </TooltipTrigger>
         <TooltipContent>{t('Codex Config')}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={openClaudeConfig}
+              disabled={isRealKeyLoading}
+              aria-label={t('Claude Config')}
+            />
+          }
+        >
+          {isRealKeyLoading ? (
+            <Loader2 className='size-4 animate-spin' />
+          ) : (
+            <Anthropic className='size-4' />
+          )}
+        </TooltipTrigger>
+        <TooltipContent>{t('Claude Config')}</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -274,6 +304,12 @@ export function DataTableRowActions<TData>({
           {t('Codex Config')}
           <DropdownMenuShortcut>
             <IconCodex className='size-4' />
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={openClaudeConfig}>
+          {t('Claude Config')}
+          <DropdownMenuShortcut>
+            <Anthropic className='size-4' />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

@@ -133,8 +133,9 @@ type RelayInfo struct {
 	// 免费模型时为 nil。
 	Billing BillingSettler
 	// BillingSource indicates whether this request is billed from wallet quota,
-	// subscription, or metered-only private-pool upstream capacity.
-	// "" or "wallet" => wallet; "subscription" => subscription; "private_pool" => no user balance mutation.
+	// subscription, or metered-only upstream capacity.
+	// "" or "wallet" => wallet; "subscription" => subscription;
+	// "private_pool" / "claude_pool" => no user balance mutation.
 	BillingSource string
 	// SubscriptionId is the user_subscriptions.id used when BillingSource == "subscription"
 	SubscriptionId int

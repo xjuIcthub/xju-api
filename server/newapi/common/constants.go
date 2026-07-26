@@ -119,6 +119,12 @@ var PoolUsageAutoRefreshEnabled = false
 // reset credits are a scarce resource an operator must opt into spending.
 var PoolUsageAutoResetEnabled = false
 
+// xju-api:inject — ClaudePoolUnlimitedEnabled keeps Claude shared-pool usage
+// metered and logged while exempting users' wallet/subscription balances. API
+// key quota limits remain available as a per-key safety valve. On by default
+// for the current Claude-pool product and hot-reloadable through system options.
+var ClaudePoolUnlimitedEnabled = true
+
 var EmailDomainRestrictionEnabled = false // 是否启用邮箱域名限制
 var EmailAliasRestrictionEnabled = false  // 是否启用邮箱别名限制
 var EmailDomainWhitelist = []string{

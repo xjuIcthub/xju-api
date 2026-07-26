@@ -59,6 +59,7 @@ const quotaSchema = z.object({
   quota_setting: z.object({
     enable_free_model_pre_consume: z.boolean(),
   }),
+  ClaudePoolUnlimitedEnabled: z.boolean(),
 })
 
 type QuotaFormValues = z.infer<typeof quotaSchema>
@@ -178,6 +179,32 @@ export function QuotaSettingsSection({
                       <FormDescription>
                         {t(
                           'When enabled, zero-cost models also pre-consume quota before final settlement.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={updateOption.isPending}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+            </SettingsFormGridItem>
+
+            <SettingsFormGridItem span='full'>
+              <FormField
+                control={form.control}
+                name='ClaudePoolUnlimitedEnabled'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Unlimited Claude Pool Quota')}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When enabled, Claude pool requests still record usage and consume optional API key quota, but do not deduct user wallet or subscription quota.'
                         )}
                       </FormDescription>
                     </SettingsSwitchContent>

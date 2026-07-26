@@ -33,18 +33,44 @@ func GetUserGroups(c *gin.Context) {
 }
 
 // getUserTokenGroups is the single source of truth for API-key routing choices.
-// XJU currently exposes one shared pool (default) plus the authenticated user's
-// ready private pool. Historical ratio/UserUsableGroups entries such as k12 or
-// vip must not leak back into the key editor after their pools are retired.
+// Shared choices come from the durable pool registry instead of blindly
+// exposing every historical ratio/UserUsableGroups entry. This keeps retired
+// groups hidden while allowing newly provisioned Codex and Claude pools to be
+// selected immediately.
 func getUserTokenGroups(userID int) map[string]map[string]interface{} {
 	usableGroups := make(map[string]map[string]interface{})
 	userGroup := ""
 	userGroup, _ = model.GetUserGroup(userID, false)
 	userUsableGroups := service.GetUserUsableGroups(userGroup)
+	// The primary default route remains available even when pool management is
+	// temporarily unconfigured. API-key routing must not depend on the health of
+	// the separate management surface.
 	if desc, ok := userUsableGroups["default"]; ok && ratio_setting.ContainsGroupRatio("default") {
 		usableGroups["default"] = map[string]interface{}{
-			"ratio": service.GetUserGroupRatio(userGroup, "default"),
-			"desc":  desc,
+			"ratio":    service.GetUserGroupRatio(userGroup, "default"),
+			"desc":     desc,
+			"provider": common.PoolProviderCodex,
+		}
+	}
+	for _, pool := range common.ListSharedPools() {
+		groupKey := strings.TrimSpace(pool.GroupKey)
+		if groupKey == "" {
+			groupKey = strings.TrimSpace(pool.ID)
+		}
+		if groupKey == "" || !ratio_setting.ContainsGroupRatio(groupKey) {
+			continue
+		}
+		desc, visible := userUsableGroups[groupKey]
+		if !visible {
+			continue
+		}
+		if strings.TrimSpace(pool.Label) != "" {
+			desc = pool.Label
+		}
+		usableGroups[groupKey] = map[string]interface{}{
+			"ratio":    service.GetUserGroupRatio(userGroup, groupKey),
+			"desc":     desc,
+			"provider": pool.Provider,
 		}
 	}
 	// Private groups never live in global UserUsableGroups. Add exactly the

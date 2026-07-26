@@ -21,10 +21,24 @@ export type ApiKeyGroupOption = {
   label: string
   desc?: string
   ratio?: number | string
+  provider?: 'codex' | 'claude'
   isPrivate?: boolean
 }
 
-type UserGroupMap = Record<string, { desc: string; ratio: number | string }>
+type UserGroupMap = Record<
+  string,
+  {
+    desc: string
+    ratio: number | string
+    provider?: 'codex' | 'claude'
+  }
+>
+
+function getProviderLabel(provider?: 'codex' | 'claude'): string {
+  if (provider === 'claude') return 'Claude'
+  if (provider === 'codex') return 'Codex / OpenAI'
+  return ''
+}
 
 export function buildApiKeyGroupOptions(
   groups: UserGroupMap,
@@ -34,11 +48,14 @@ export function buildApiKeyGroupOptions(
   return Object.entries(groups)
     .map(([value, info]) => {
       const isPrivate = privateGroup !== '' && value === privateGroup
+      const displayName = info.desc || value
+      const providerLabel = getProviderLabel(info.provider)
       return {
         value,
-        label: isPrivate && username ? `@${username}` : value,
-        desc: info.desc || value,
+        label: isPrivate && username ? `@${username}` : displayName,
+        desc: providerLabel ? `${providerLabel} · ${value}` : displayName,
         ratio: info.ratio,
+        provider: info.provider,
         isPrivate,
       }
     })

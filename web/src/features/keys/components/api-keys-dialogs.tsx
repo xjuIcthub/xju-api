@@ -20,6 +20,7 @@ import { ApiKeysDeleteDialog } from './api-keys-delete-dialog'
 import { ApiKeysMutateDrawer } from './api-keys-mutate-drawer'
 import { useApiKeys } from './api-keys-provider'
 import { CCSwitchDialog } from './pool-integration/cc-switch-dialog'
+import { ClaudeConfigDialog } from './pool-integration/claude-config-dialog'
 import { CodexConfigDialog } from './pool-integration/codex-config-dialog'
 
 export function ApiKeysDialogs() {
@@ -40,6 +41,11 @@ export function ApiKeysDialogs() {
       />
       <CodexConfigDialog
         open={open === 'codex-config'}
+        onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+        tokenKey={resolvedKey}
+      />
+      <ClaudeConfigDialog
+        open={open === 'claude-config'}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         tokenKey={resolvedKey}
       />

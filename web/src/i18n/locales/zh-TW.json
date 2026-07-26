@@ -5543,6 +5543,13 @@
     "Open the {{provider}} login page": "Open the {{provider}} login page",
     "Complete login in the new tab. It will automatically redirect to the localhost callback.": "Complete login in the new tab. It will automatically redirect to the localhost callback.",
     "Open {{provider}} login": "Open {{provider}} login",
-    "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.": "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts."
+    "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.": "Shared pools are read-only for regular users. Claude pools expose account status only; use My Pool to manage your own Codex accounts.",
+    "Claude Config": "Claude 設定",
+    "settings.json": "settings.json",
+    "Save as ~/.claude/settings.json": "儲存為 ~/.claude/settings.json",
+    "Save this file for Claude Code. The endpoint does not include /v1 because Claude Code appends /v1/messages automatically.": "將此檔案儲存給 Claude Code 使用。端點不要包含 /v1，因為 Claude Code 會自動附加 /v1/messages。",
+    "The API key in this file is the full key. Treat settings.json as a secret and do not share it.": "此檔案包含目前金鑰的完整內容。請將 settings.json 視為敏感檔案，不要分享。",
+    "Unlimited Claude Pool Quota": "Claude 號池使用者無限額度",
+    "When enabled, Claude pool requests still record usage and consume optional API key quota, but do not deduct user wallet or subscription quota.": "開啟後，Claude 號池請求仍會記錄用量，並受可選的 API 金鑰額度限制，但不會扣除使用者錢包或訂閱額度。"
   }
 }

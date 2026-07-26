@@ -86,15 +86,15 @@ func taskIsSubscription(task *model.Task) bool {
 	return task.PrivateData.BillingSource == BillingSourceSubscription && task.PrivateData.SubscriptionId > 0
 }
 
-func taskUsesPrivatePoolFunding(task *model.Task) bool {
-	return task.PrivateData.BillingSource == BillingSourcePrivatePool
+func taskUsesBalanceExemptFunding(task *model.Task) bool {
+	return isBalanceExemptBillingSource(task.PrivateData.BillingSource)
 }
 
-// taskAdjustFunding 调整任务的资金来源（钱包/订阅；私人号池为 no-op），delta > 0 表示扣费，delta < 0 表示退还。
+// taskAdjustFunding 调整任务的资金来源（钱包/订阅；免余额号池为 no-op），delta > 0 表示扣费，delta < 0 表示退还。
 func taskAdjustFunding(task *model.Task, delta int) error {
-	// xju-api:inject — async private-pool tasks keep token settlement and usage
-	// logs but never mutate the user's shared-pool balance.
-	if taskUsesPrivatePoolFunding(task) {
+	// xju-api:inject — balance-exempt async tasks keep token settlement and
+	// usage logs but never mutate the user's wallet/subscription balance.
+	if taskUsesBalanceExemptFunding(task) {
 		return nil
 	}
 	if taskIsSubscription(task) {

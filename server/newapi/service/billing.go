@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -16,10 +17,40 @@ const (
 	// xju-api:inject — usage is priced and logged normally, but the user's
 	// shared-pool wallet/subscription quota is not a funding source.
 	BillingSourcePrivatePool = "private_pool"
+	// xju-api:inject — Claude shared pools can be switched into metered-only
+	// mode: usage remains priced/logged, but user wallet/subscription is not a
+	// funding source.
+	BillingSourceClaudePool = "claude_pool"
 )
 
 func IsPrivatePoolBalanceExempt(relayInfo *relaycommon.RelayInfo) bool {
 	return relayInfo != nil && relayInfo.PrivatePoolBalanceExempt
+}
+
+func IsClaudePoolBalanceExempt(relayInfo *relaycommon.RelayInfo) bool {
+	if relayInfo == nil || !common.ClaudePoolUnlimitedEnabled {
+		return false
+	}
+	channelID := 0
+	if relayInfo.ChannelMeta != nil {
+		channelID = relayInfo.ChannelId
+	}
+	provider, ok := common.FindPoolProviderByRouting(channelID, relayInfo.UsingGroup)
+	return ok && provider == common.PoolProviderClaude
+}
+
+func balanceExemptBillingSource(relayInfo *relaycommon.RelayInfo) string {
+	if IsPrivatePoolBalanceExempt(relayInfo) {
+		return BillingSourcePrivatePool
+	}
+	if IsClaudePoolBalanceExempt(relayInfo) {
+		return BillingSourceClaudePool
+	}
+	return ""
+}
+
+func isBalanceExemptBillingSource(source string) bool {
+	return source == BillingSourcePrivatePool || source == BillingSourceClaudePool
 }
 
 // PreConsumeBilling 根据用户计费偏好创建 BillingSession 并执行预扣费。
@@ -82,9 +113,9 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 			return err
 		}
 
-		// 发送额度通知（订阅计费使用订阅剩余额度）。私人号池只计量，
+		// 发送额度通知（订阅计费使用订阅剩余额度）。免余额号池只计量，
 		// 不消耗用户额度，因此没有余额提醒。
-		if actualQuota != 0 && relayInfo.BillingSource != BillingSourcePrivatePool {
+		if actualQuota != 0 && !isBalanceExemptBillingSource(relayInfo.BillingSource) {
 			if relayInfo.BillingSource == BillingSourceSubscription {
 				checkAndSendSubscriptionQuotaNotify(relayInfo)
 			} else {

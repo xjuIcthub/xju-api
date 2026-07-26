@@ -41,11 +41,15 @@ function resolvedClaudeModels(models: Models) {
   }
 }
 
-export function buildClaudeConfig(token: string, models: Models) {
+export function buildClaudeConfig(
+  token: string,
+  models: Models,
+  endpoint = PUBLIC_API_ENDPOINT
+) {
   const resolved = resolvedClaudeModels(models)
   return {
     env: {
-      ANTHROPIC_BASE_URL: PUBLIC_API_ENDPOINT,
+      ANTHROPIC_BASE_URL: endpoint.replace(/\/+$/, ''),
       ANTHROPIC_AUTH_TOKEN: token,
       ANTHROPIC_MODEL: resolved.model,
       ANTHROPIC_DEFAULT_HAIKU_MODEL: resolved.haikuModel,

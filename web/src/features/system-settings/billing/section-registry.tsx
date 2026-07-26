@@ -66,6 +66,7 @@ const BILLING_SECTIONS = [
             enable_free_model_pre_consume:
               settings['quota_setting.enable_free_model_pre_consume'],
           },
+          ClaudePoolUnlimitedEnabled: settings.ClaudePoolUnlimitedEnabled,
         }}
       />
     ),

@@ -233,6 +233,8 @@ func (s *BillingSession) reserveFunding(delta int) error {
 	switch funding := s.funding.(type) {
 	case *PrivatePoolFunding:
 		return nil
+	case *ClaudePoolFunding:
+		return nil
 	case *WalletFunding:
 		if err := model.DecreaseUserQuota(funding.userId, delta, false); err != nil {
 			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
@@ -258,6 +260,8 @@ func (s *BillingSession) reserveFunding(delta int) error {
 func (s *BillingSession) rollbackFundingReserve(delta int) {
 	switch funding := s.funding.(type) {
 	case *PrivatePoolFunding:
+		return
+	case *ClaudePoolFunding:
 		return
 	case *WalletFunding:
 		if err := model.IncreaseUserQuota(funding.userId, delta, false); err != nil {
@@ -305,7 +309,7 @@ func (s *BillingSession) shouldTrust(c *gin.Context) bool {
 	}
 
 	switch s.funding.Source() {
-	case BillingSourcePrivatePool:
+	case BillingSourcePrivatePool, BillingSourceClaudePool:
 		return false
 	case BillingSourceWallet:
 		return s.relayInfo.UserQuota > trustQuota
@@ -349,13 +353,18 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	if relayInfo == nil {
 		return nil, types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
-	// xju-api:inject — a user-owned pool is not funded by the platform wallet or
-	// subscription. Keep the same priced quota and token lifecycle so usage,
-	// logs and optional per-key limits remain consistent with shared pools.
-	if IsPrivatePoolBalanceExempt(relayInfo) {
+	// xju-api:inject — user-owned pools and switch-enabled Claude shared pools
+	// are not funded by the platform wallet/subscription. Keep the same priced
+	// quota and token lifecycle so usage, logs and optional per-key limits remain
+	// consistent with billed shared pools.
+	if source := balanceExemptBillingSource(relayInfo); source != "" {
+		var funding FundingSource = &PrivatePoolFunding{}
+		if source == BillingSourceClaudePool {
+			funding = &ClaudePoolFunding{}
+		}
 		session := &BillingSession{
 			relayInfo: relayInfo,
-			funding:   &PrivatePoolFunding{},
+			funding:   funding,
 		}
 		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
 			return nil, apiErr

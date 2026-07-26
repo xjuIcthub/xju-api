@@ -146,7 +146,12 @@ Advanced Custom 并补齐 Anthropic / OpenAI 六条原样路由和 Claude Code H
 上线前照常备份 `one-api.db`；启动后可在管理员渠道页确认同一渠道 ID 的类型已变为
 Advanced Custom，再分别用 `/v1/messages/count_tokens`、`/v1/messages` 和 `/v1/responses`
 做冒烟测试。用户端 Claude Endpoint 必须填写 `https://api.selab.top`（不带 `/v1`），
-不要让用户直连 `codex.selab.top`。
+不要让用户直连 `codex.selab.top`。用户也可以在 API 密钥行点击 Anthropic 图标，直接复制
+按当前访问域名生成的 `~/.claude/settings.json`。
+
+Claude 公共号池默认启用“用户无限额度”：管理员在「系统设置 → 计费设置 → 额度设置」
+切换 `ClaudePoolUnlimitedEnabled`。开启时只免用户钱包/订阅扣费，用量日志、渠道统计和
+API Key 自身额度照常生效；关闭后新请求恢复正常钱包/订阅计费，无需重启。
 
 **回滚** = 用上一版镜像 tag 重跑 `IMAGE=winbeau/xju-newapi:<旧tag> bash deploy/run-newapi.sh`(旧镜像仍在本机;数据在宿主 volume 不受影响)。升级前记下当前 tag。
 

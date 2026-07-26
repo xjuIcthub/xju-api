@@ -155,7 +155,7 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 	if relayInfo == nil || other == nil {
 		return
 	}
-	// xju-api:edit — billing_source: "wallet", "subscription", or "private_pool".
+	// xju-api:edit — billing_source: "wallet", "subscription", "private_pool", or "claude_pool".
 	if relayInfo.BillingSource != "" {
 		other["billing_source"] = relayInfo.BillingSource
 	}

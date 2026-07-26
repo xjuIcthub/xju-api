@@ -50,12 +50,14 @@ func InitOptionMap() {
 	//                              allowlist(见下方 if 链)进 bool switch 生效
 	//   PoolAutoCleanEnabled bool  走 *Enabled 后缀通道 + bool switch case
 	//   PoolAutoCleanHours   int   走 updateOptionMap 的特判(>0 才生效,默认 24)
-	// 三键均持久化于 options 表并热更新,不需要重启。
+	//   其他自有 *Enabled    bool  同样登记 OptionMap + bool switch case
+	// 所有键均持久化于 options 表并热更新,不需要重启。
 	common.OptionMap["InviteCodeRequired"] = strconv.FormatBool(common.InviteCodeRequired)
 	common.OptionMap["PoolAutoCleanEnabled"] = strconv.FormatBool(common.PoolAutoCleanEnabled)
 	common.OptionMap["PoolAutoCleanHours"] = strconv.Itoa(common.PoolAutoCleanHours)
 	common.OptionMap["PoolUsageAutoRefreshEnabled"] = strconv.FormatBool(common.PoolUsageAutoRefreshEnabled)
 	common.OptionMap["PoolUsageAutoResetEnabled"] = strconv.FormatBool(common.PoolUsageAutoResetEnabled)
+	common.OptionMap["ClaudePoolUnlimitedEnabled"] = strconv.FormatBool(common.ClaudePoolUnlimitedEnabled)
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
@@ -330,6 +332,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.PoolUsageAutoRefreshEnabled = boolValue
 		case "PoolUsageAutoResetEnabled":
 			common.PoolUsageAutoResetEnabled = boolValue
+		case "ClaudePoolUnlimitedEnabled":
+			common.ClaudePoolUnlimitedEnabled = boolValue
 		case "EmailDomainRestrictionEnabled":
 			common.EmailDomainRestrictionEnabled = boolValue
 		case "EmailAliasRestrictionEnabled":

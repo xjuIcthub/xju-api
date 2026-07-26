@@ -11,6 +11,8 @@
 
 ## 号池管理
 
+- **API 密钥可绑定任意可用号池** —— 新建/编辑 API 密钥的分组列表改为从已配置公共号池 registry 生成，不再只暴露 `default`；Codex、Claude 与用户自己的私人池均可选，已退役但残留在倍率配置中的历史分组不会重新出现。选择器直接显示号池名称，并标注 `Codex / OpenAI` 或 `Claude` 路由身份。
+- **Claude 号池无限额度开关** —— 新增默认开启的 `ClaudePoolUnlimitedEnabled` 系统选项。开启时 Claude 公共号池仍按模型价格计算并记录用户、渠道、Token 用量，API Key 自身的可选额度仍生效，但不校验、不扣减用户钱包或订阅额度；关闭后新请求立即恢复正常钱包/订阅计费。
 - **Codex / Claude 双 Provider 号池** —— 公共号池新建入口拆为 `CPA (Codex)`、`CPA (Claude)`、`go-pool` 三种；Provider 与构建模式写入 registry/provision 契约，Claude 仅允许公共 CPA 池并只开放 Anthropic OAuth 登录导入。新渠道按 Provider 从 CLIProxyAPI 拉取 Codex 或 Claude 模型目录，杜绝 Claude 池继承 GPT 模型。号池页显示 `Codex · GPT · OpenAI` / `Claude · Anthropic` 标识，Claude 池隐藏 Codex 专属订阅、Wham 额度、重置券与验活操作。
 - **Provider 独立用量看板** —— `quota_data` 新增 Provider 维度，旧数据兼容归入 Codex；缓存合并、落库聚合、用户/管理员模型统计与 Flow 查询均按 Provider 隔离。原「概览 / 数据看板」保持 Codex 口径，侧栏新增「概览（Claude）/ 数据看板（Claude）」复用同一套图表并只查询 Claude 用量；各号池继续使用独立 GroupRatio 计价。
 - **共享号池分级权限** —— 普通用户可从个人侧栏进入共享号池，但仅能查看脱敏后的账号状态、逐号测速和逐号查询额度；新增 / 导入 / 登录 / 启停 / 删除 / 重置 / 批量检测 / 自动维护均由管理员或 root 操作。普通用户自己的私人号池继续保留完整管理能力，role=10 管理员不能跨入他人私人池，root 保留全局排障权限。
@@ -40,6 +42,7 @@
 
 ## Codex 配置 / 模型
 
+- **Claude Code 一键配置** —— API 密钥操作列新增 Anthropic 图标按钮，可直接复制 `~/.claude/settings.json`；端点取当前部署根地址且不附加 `/v1`，Token 自动规范为单个 `sk-` 前缀，并预设 Sol / Terra / Luna 到 Opus / Sonnet / Haiku 的模型映射。
 - **CC Switch Claude 一键配置** —— API Token 行在 Codex 图标右侧新增 CC Switch 官方 Logo；配置弹窗默认 Claude 模式，端点固定 `https://api.selab.top`、Full URL 为否，并预设 XJU 三档映射：主模型/Opus → `gpt-5.6-sol`、Sonnet → `gpt-5.6-terra`、Haiku → `gpt-5.6-luna`。可复制标准 Config JSON 或 Deep Link；Token 默认遮罩，配置只在浏览器本地生成。
 - **Codex 一键配置** —— API 密钥操作列直达按钮,一键复制 `config.toml` / `auth.json`,去掉 CLI 字样,ChatGPT 花瓣图标。
 - **Responses WebSocket** —— `api.selab.top/v1/responses` 支持 `101 Switching Protocols`;L1 先验日卡、首帧按模型/分组选池,再保持到 CLIProxyAPI 的持久 WebSocket,每个 `response.create` 继续预扣费、按 usage 结算并写用量日志;一键配置默认生成 `supports_websockets = true`。
