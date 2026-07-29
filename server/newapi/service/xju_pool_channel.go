@@ -34,6 +34,13 @@ var poolAdvancedCustomPaths = []string{
 	"/v1/completions",
 	"/v1/responses",
 	"/v1/responses/compact",
+	// 号池现役含 gpt-image-2 / gpt-image-1.5，且 CLIProxyAPI 只在这两个端点上
+	// 提供它们(见 sdk/api/handlers 的 image-only 校验)。缺这两条路由时
+	// distributor 找不到能服务 /v1/images/* 的渠道，图片请求会以
+	// 「分组 X 下模型 gpt-image-2 无可用渠道」失败，尽管渠道模型表与
+	// abilities 都已包含该模型。
+	"/v1/images/generations",
+	"/v1/images/edits",
 }
 
 var poolGroupOptionsMu sync.Mutex

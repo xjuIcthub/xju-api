@@ -164,6 +164,17 @@ func TestRegisteredPoolChannelsFindsRenamedRegistryChannel(t *testing.T) {
 	assert.Equal(t, channel.Id, channels[0].Id)
 }
 
+// 图片端点必须留在号池路由白名单里。上面的 assertPoolRequiredAdvancedCustomRoutes
+// 是遍历 poolAdvancedCustomPaths 本身来断言的，删掉条目它依然会通过；这里显式钉住
+// 两个图片端点，避免再次退化成「渠道有 gpt-image-2、abilities 也有，但 distributor
+// 报无可用渠道」。
+func TestPoolAdvancedCustomPathsCoverImageEndpoints(t *testing.T) {
+	for _, path := range []string{"/v1/images/generations", "/v1/images/edits"} {
+		assert.Contains(t, poolAdvancedCustomPaths, path,
+			"image endpoint %s must stay in the pool route whitelist", path)
+	}
+}
+
 func assertPoolAdvancedCustomConfig(t *testing.T, config *dto.AdvancedCustomConfig) {
 	t.Helper()
 	require.NotNil(t, config)
