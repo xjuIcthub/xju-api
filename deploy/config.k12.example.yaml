@@ -33,7 +33,21 @@ error-logs-max-files: 10
 
 usage-statistics-enabled: false # 记账在 L1 new-api 做
 
-request-retry: 3
+# Keep retries bounded: the handler already retries a stream once before the first
+# downstream byte, so broad credential traversal only amplifies transient failures.
+request-retry: 1
+max-retry-credentials: 2
+max-retry-interval: 10
+
+disable-cooling: false
+save-cooldown-status: true
+transient-error-cooldown-seconds: 60
+
+# Keep long SSE requests alive and retry exactly once only while no downstream
+# payload has been emitted. Partial responses are never replayed automatically.
+streaming:
+  keepalive-seconds: 15
+  bootstrap-retries: 1
 
 quota-exceeded:
   switch-project: true
