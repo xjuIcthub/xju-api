@@ -266,7 +266,20 @@ WebSearch 转换器还有缺失 ID、action-only 事件和 block index 的潜在
 - `server/cliproxy/internal/translator/codex/claude/codex_claude_response_web_search.go:13-88`
 - `server/cliproxy/internal/translator/codex/claude/codex_claude_response_web_search.go:155-188`
 
-### 3.3 重试与上下文修复点
+### 3.3 终止事件兼容修复（2026-07-30，本机已实现，待部署）
+
+本轮先落地不会造成重复工具调用的安全子集：
+
+1. HTTP/SSE 与 Codex Responses WebSocket 都接受 `response.incomplete` 作为合法终止事件；
+2. `response.done` 在需要 SSE/HTTP 翻译时规范化为 `response.completed`；
+3. `response.incomplete` 保留 `incomplete_details`，Claude 转换器继续映射为 `max_tokens` / refusal，并正常发送 `message_stop`；
+4. 合法 incomplete/done 终止不再追加伪 408，也按 exactly-once 规则完成 usage finalization；
+5. 部署样板将流式 bootstrap 配为只在首个下游 payload 前重试一次，部分响应后仍禁止整单重放；
+6. 部署样板将账号级重试收敛为 `request-retry: 1` / `max-retry-credentials: 2`，并启用 cooldown 持久化、60 秒 transient cooldown 与 15 秒 SSE keepalive。
+
+真实在内容中途断开的连接仍然返回明确错误；本补丁不会伪造 `response.completed`，也不会在已经输出正文或工具调用后重新执行原请求。
+
+### 3.4 重试与上下文修复点
 
 1. 统一识别 HTTP 和 SSE 两条路径的 context overflow；
 2. 设计一次性 `compact-and-retry` 状态机，严格限制最多自动恢复一次；
@@ -290,7 +303,7 @@ WebSearch 转换器还有缺失 ID、action-only 事件和 block index 的潜在
 | **M0：问题审计** | usage、context、retry、WebSearch 延迟 | 28-agent 细粒度审计、对抗核验、根因清单 | 28/28 agent 成功；区分已确认缺陷、潜在风险和正常客户端行为 | ✅ 已完成 |
 | **M1：Usage accounting P0** | Codex 非流式/流式记账 | exactly-once finalizer、零 usage 成功、EOF/取消失败、Codex total 修正、Redis queue 回归测试 | 每个 Codex 请求恰好一条主记录；正常完成不漏记；中断不静默；reasoning/cache 不重复计数 | ✅ 已实现并部署 |
 | **M2：Context recovery P0** | context overflow 与 compact | overflow 分类、一次性 compact-and-retry、历史重建、独立超时、端到端测试 | 可恢复的 overflow 自动重试一次；不可恢复时快速、明确失败；无无限循环 | ⏳ 待设计/实施 |
-| **M3：Retry/terminal latency P1** | WebSocket、cooldown、并发工具调用 | terminal deadline、retry/cooldown 可观测性、安全 fallback 策略 | WebSearch/工具调用不再无提示等待数分钟；每次等待可定位到上游、WS 或 cooldown | ⏳ 待设计/实施 |
+| **M3：Retry/terminal latency P1** | WebSocket、cooldown、并发工具调用 | terminal event 兼容、terminal deadline、retry/cooldown 可观测性、安全 fallback 策略 | WebSearch/工具调用不再无提示等待数分钟；每次等待可定位到上游、WS 或 cooldown | 🟡 部分完成：incomplete/done + 首包前单次重试已实现，deadline/观测/fallback 待续 |
 | **M4：Claude Code 全链路验收** | 主 agent、Workflow、subagent、WebSearch | stream/non-stream A/B、长上下文、并发 agent、CPA 对账报告 | Claude Code token 与 CPA 最终 usage 可解释；Workflow 不漏请求；overflow 可恢复或明确失败；WebSearch 延迟有界 | ⏳ 待验收 |
 
 ### 4.1 M1：Usage accounting P0 任务拆分

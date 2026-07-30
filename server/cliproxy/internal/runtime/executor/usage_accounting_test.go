@@ -60,6 +60,30 @@ func TestCodexExecutorExecuteStreamCompletionWithoutUsageRecordsZeroSuccess(t *t
 	assertNoDuplicateCodexExecutorUsage(t, records, model)
 }
 
+func TestCodexExecutorExecuteStreamIncompleteRecordsTerminalUsage(t *testing.T) {
+	server := newCodexUsageTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		writeCodexSSE(t, w, `{"type":"response.incomplete","response":{"id":"resp_incomplete","model":"gpt-5.4","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":8,"output_tokens":2,"total_tokens":10},"output":[]}}`)
+	})
+	defer server.Close()
+
+	model := uniqueCodexUsageModel("stream-incomplete")
+	records := captureCodexExecutorUsage()
+	executor := NewCodexExecutor(&config.Config{})
+	result, err := executor.ExecuteStream(context.Background(), codexUsageTestAuth(server.URL, model), codexUsageTestRequest(model), codexUsageTestOptions(true))
+	if err != nil {
+		t.Fatalf("ExecuteStream() error = %v", err)
+	}
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("stream chunk error = %v", chunk.Err)
+		}
+	}
+
+	record := waitForCodexExecutorUsage(t, records, model)
+	assertCodexUsageRecord(t, record, false, 8, 2, 0, 10)
+	assertNoDuplicateCodexExecutorUsage(t, records, model)
+}
+
 func TestCodexExecutorExecuteStreamCompletionWithoutTotalUsesInputPlusOutput(t *testing.T) {
 	server := newCodexUsageTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		writeCodexSSE(t, w, `{"type":"response.completed","response":{"id":"resp_usage","model":"gpt-5.4","usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":30},"output_tokens_details":{"reasoning_tokens":9}},"output":[]}}`)

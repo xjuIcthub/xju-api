@@ -700,7 +700,7 @@ func (e *XAIWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 					continue
 				}
 
-				payload = normalizeCodexWebsocketCompletion(payload)
+				payload = normalizeResponsesDoneEvent(payload)
 				line := encodeCodexWebsocketAsSSE(payload)
 				chunks := sdktranslator.TranslateStream(ctx, prepared.to, prepared.responseFormat, req.Model, prepared.originalPayload, prepared.body, line, &param)
 				for i := range chunks {

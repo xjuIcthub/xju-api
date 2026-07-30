@@ -381,12 +381,13 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 			return resp, wsErr
 		}
 
-		payload = normalizeCodexWebsocketCompletion(payload)
+		payload = normalizeResponsesDoneEvent(payload)
 		eventType := gjson.GetBytes(payload, "type").String()
-		if eventType == "response.completed" {
+		if isCodexResponseTerminalEvent(eventType) {
 			if detail, ok := helps.ParseCodexUsage(payload); ok {
 				reporter.Publish(ctx, detail)
 			}
+			reporter.EnsurePublished(ctx)
 			var param any
 			clientPayload := applyCodexIdentityExposeResponsePayload(payload, identityState)
 			out := sdktranslator.TranslateNonStream(ctx, to, responseFormat, req.Model, originalPayload, clientBody, clientPayload, &param)
@@ -657,13 +658,15 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 			}
 
 			eventType := gjson.GetBytes(payload, "type").String()
-			isTerminalEvent := eventType == "response.completed" || eventType == "response.done" || eventType == "error"
+			isTerminalResponse := isCodexResponseTerminalEvent(eventType) || eventType == "response.done"
+			isTerminalEvent := isTerminalResponse || eventType == "error"
 			clientPayload := applyCodexIdentityExposeResponsePayload(payload, identityState)
 			if cliproxyexecutor.DownstreamWebsocket(ctx) {
-				if eventType == "response.completed" || eventType == "response.done" {
+				if isTerminalResponse {
 					if detail, ok := helps.ParseCodexUsage(payload); ok {
 						reporter.Publish(ctx, detail)
 					}
+					reporter.EnsurePublished(ctx)
 				}
 				if !send(cliproxyexecutor.StreamChunk{Payload: clientPayload}) {
 					terminateReason = "context_done"
@@ -676,12 +679,13 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				continue
 			}
 
-			payload = normalizeCodexWebsocketCompletion(payload)
+			payload = normalizeResponsesDoneEvent(payload)
 			eventType = gjson.GetBytes(payload, "type").String()
-			if eventType == "response.completed" || eventType == "response.done" {
+			if isCodexResponseTerminalEvent(eventType) {
 				if detail, ok := helps.ParseCodexUsage(payload); ok {
 					reporter.Publish(ctx, detail)
 				}
+				reporter.EnsurePublished(ctx)
 			}
 
 			clientPayload = applyCodexIdentityExposeResponsePayload(payload, identityState)
@@ -694,7 +698,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					return
 				}
 			}
-			if eventType == "response.completed" || eventType == "response.done" {
+			if isCodexResponseTerminalEvent(eventType) {
 				return
 			}
 		}
@@ -1270,16 +1274,6 @@ func parseCodexWebsocketErrorHeaders(payload []byte) http.Header {
 		return nil
 	}
 	return mapped
-}
-
-func normalizeCodexWebsocketCompletion(payload []byte) []byte {
-	if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.done" {
-		updated, err := sjson.SetBytes(payload, "type", "response.completed")
-		if err == nil && len(updated) > 0 {
-			return updated
-		}
-	}
-	return payload
 }
 
 func encodeCodexWebsocketAsSSE(payload []byte) []byte {

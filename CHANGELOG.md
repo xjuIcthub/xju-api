@@ -42,6 +42,7 @@
 
 ## Codex 配置 / 模型
 
+- **Codex 流终止稳定性修复（待部署）** —— HTTP/SSE 与 Responses WebSocket 统一把 `response.incomplete` 视为合法终止事件，并把 `response.done` 规范化为 `response.completed`，避免上游已正常以 max-output/content-filter 收束后又被误报为 `stream closed before response.completed`；部署样板只在首个下游 payload 前安全重试一次，部分输出后绝不整单重放。部署模板同步收敛账号重试、持久化 cooldown，并启用 SSE keepalive。
 - **Claude Code 一键配置** —— API 密钥操作列新增 Anthropic 图标按钮，可直接复制 `~/.claude/settings.json`；端点取当前部署根地址且不附加 `/v1`，Token 自动规范为单个 `sk-` 前缀，并预设 Sol / Terra / Luna 到 Opus / Sonnet / Haiku 的模型映射。GPT/Codex 号池额外声明 `272000` token 模型窗口，并按 `240000 × 88% = 211200` token 提前自动压缩，避免会话抵达硬上限后连 compact 请求本身也无法提交；Claude 官方模型继续使用客户端原生窗口策略。
 - **CC Switch Claude 一键配置** —— API Token 行在 Codex 图标右侧新增 CC Switch 官方 Logo；配置弹窗默认 Claude 模式，端点固定 `https://api.selab.top`、Full URL 为否，并预设 XJU 三档映射：主模型/Opus → `gpt-5.6-sol`、Sonnet → `gpt-5.6-terra`、Haiku → `gpt-5.6-luna`。可复制标准 Config JSON 或 Deep Link；Token 默认遮罩，配置只在浏览器本地生成。Claude 深链同时携带完整 `env` 配置，因此 GPT 号池通过 CC Switch 导入时也会保留提前压缩参数。
 - **Codex 一键配置** —— API 密钥操作列直达按钮,一键复制 `config.toml` / `auth.json`,去掉 CLI 字样,ChatGPT 花瓣图标。

@@ -60,6 +60,26 @@ func collectCodexOutputItemDone(eventData []byte, outputItemsByIndex map[int64][
 	*outputItemsFallback = append(*outputItemsFallback, []byte(itemResult.Raw))
 }
 
+func normalizeResponsesDoneEvent(eventData []byte) []byte {
+	if strings.TrimSpace(gjson.GetBytes(eventData, "type").String()) != "response.done" {
+		return eventData
+	}
+	updated, err := sjson.SetBytes(eventData, "type", "response.completed")
+	if err != nil || len(updated) == 0 {
+		return eventData
+	}
+	return updated
+}
+
+func isCodexResponseTerminalEvent(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "response.completed", "response.incomplete":
+		return true
+	default:
+		return false
+	}
+}
+
 func patchCodexCompletedOutput(eventData []byte, outputItemsByIndex map[int64][]byte, outputItemsFallback [][]byte) []byte {
 	outputResult := gjson.GetBytes(eventData, "response.output")
 	shouldPatchOutput := (!outputResult.Exists() || !outputResult.IsArray() || len(outputResult.Array()) == 0) && (len(outputItemsByIndex) > 0 || len(outputItemsFallback) > 0)
@@ -871,7 +891,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 			continue
 		}
 
-		eventData := bytes.TrimSpace(line[5:])
+		eventData := normalizeResponsesDoneEvent(bytes.TrimSpace(line[5:]))
 		streamUsage.Observe(helps.ParseCodexUsage(eventData))
 		eventType := gjson.GetBytes(eventData, "type").String()
 
@@ -903,13 +923,15 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 			continue
 		}
 
-		if eventType != "response.completed" {
+		if !isCodexResponseTerminalEvent(eventType) {
 			continue
 		}
 
 		streamUsage.Publish(ctx, reporter)
 		reporter.EnsurePublished(ctx)
-		publishCodexImageToolUsage(ctx, reporter, body, eventData)
+		if eventType == "response.completed" {
+			publishCodexImageToolUsage(ctx, reporter, body, eventData)
+		}
 
 		completedData := eventData
 		outputResult := gjson.GetBytes(completedData, "response.output")
@@ -933,7 +955,9 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 			}
 			completedData = completedDataPatched
 		}
-		cacheCodexReasoningReplayFromCompleted(replayScope, completedData)
+		if eventType == "response.completed" {
+			cacheCodexReasoningReplayFromCompleted(replayScope, completedData)
+		}
 
 		var param any
 		clientCompletedData := applyCodexIdentityExposeResponsePayload(completedData, identityState)
@@ -1168,14 +1192,14 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		accountingCtx = context.WithoutCancel(accountingCtx)
 		var streamUsage helps.StreamUsageBuffer
 		accountingFinalized := false
-		completed := false
+		terminal := false
 		var terminalErr error
 		finalizeAccounting := func() {
 			if accountingFinalized {
 				return
 			}
 			accountingFinalized = true
-			if completed {
+			if terminal {
 				streamUsage.Publish(accountingCtx, reporter)
 				reporter.EnsurePublished(accountingCtx)
 				return
@@ -1196,7 +1220,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			case out <- chunk:
 				return true
 			case <-ctx.Done():
-				if !completed && terminalErr == nil {
+				if !terminal && terminalErr == nil {
 					terminalErr = ctx.Err()
 				}
 				return false
@@ -1214,7 +1238,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			translatedLine := bytes.Clone(line)
 
 			if bytes.HasPrefix(line, dataTag) {
-				data := bytes.TrimSpace(line[5:])
+				data := normalizeResponsesDoneEvent(bytes.TrimSpace(line[5:]))
 				streamUsage.Observe(helps.ParseCodexUsage(data))
 				if streamErr, terminalBody, ok := codexTerminalStreamErr(data); ok {
 					terminalErr = streamErr
@@ -1226,15 +1250,20 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 					sendChunk(cliproxyexecutor.StreamChunk{Err: terminalErr})
 					return
 				}
-				switch gjson.GetBytes(data, "type").String() {
+				eventType := gjson.GetBytes(data, "type").String()
+				switch eventType {
 				case "response.output_item.done":
 					collectCodexOutputItemDone(data, outputItemsByIndex, &outputItemsFallback)
-				case "response.completed":
-					completed = true
+				case "response.completed", "response.incomplete":
+					terminal = true
 					finalizeAccounting()
-					publishCodexImageToolUsage(accountingCtx, reporter, body, data)
+					if eventType == "response.completed" {
+						publishCodexImageToolUsage(accountingCtx, reporter, body, data)
+					}
 					data = patchCodexCompletedOutput(data, outputItemsByIndex, outputItemsFallback)
-					cacheCodexReasoningReplayFromCompleted(replayScope, data)
+					if eventType == "response.completed" {
+						cacheCodexReasoningReplayFromCompleted(replayScope, data)
+					}
 					translatedLine = append([]byte("data: "), data...)
 				}
 			}
@@ -1246,7 +1275,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 					return
 				}
 			}
-			if completed {
+			if terminal {
 				return
 			}
 		}
